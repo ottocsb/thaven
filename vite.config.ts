@@ -1,5 +1,5 @@
 import Tov from './presets'
-import {defineConfig} from 'vite'
+import { defineConfig } from 'vite'
 
 export default defineConfig({
 	plugins: [Tov()],
@@ -8,6 +8,7 @@ export default defineConfig({
 	// Tauri expects a fixed port, fail if that port is not available
 	server: {
 		strictPort: true,
+		port: 5199, // 设置服务启动端口号
 	},
 	// to make use of `TAURI_PLATFORM`, `TAURI_ARCH`, `TAURI_FAMILY`,
 	// `TAURI_PLATFORM_VERSION`, `TAURI_PLATFORM_TYPE` and `TAURI_DEBUG`
