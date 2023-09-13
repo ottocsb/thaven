@@ -44,7 +44,7 @@
     "changelogen": "^0.5.5",
     "cross-env": "^7.0.3",
     "echarts": "^5.4.3",
-		"eslint": "^8.49.0",
+    "eslint": "^8.49.0",
     "eslint-config-prettier": "^9.0.0",
     "eslint-plugin-prettier": "^5.0.0",
     "eslint-plugin-vue": "^9.17.0",
@@ -76,7 +76,7 @@
     "vite-plugin-warmup": "^0.1.0",
     "vue": "^3.3.4",
     "vue-dark-switch": "^1.0.5",
-		"vue-i18n": "^9.4.0",
+    "vue-i18n": "^9.4.0",
     "vue-request": "2.0.3",
     "vue-router": "^4.2.4",
     "vue-toastification": "2.0.0-rc.5"
