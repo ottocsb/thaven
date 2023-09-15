@@ -23,7 +23,7 @@ interface searchParams {
     seed: string;
 }
 
-// 写js doc
+
 /**
  * 搜索
  *

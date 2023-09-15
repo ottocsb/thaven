@@ -2,16 +2,16 @@ use tauri::Manager;
 use tauri::{CustomMenuItem, SystemTrayMenu, SystemTrayMenuItem ,SystemTrayEvent,AppHandle};
 pub fn build_tray_menu()->SystemTrayMenu{
 	let quit = CustomMenuItem::new("quit".to_string(), "quit");
-  let hide = CustomMenuItem::new("hide".to_string(), "hide");
+    let hide = CustomMenuItem::new("hide".to_string(), "hide");
 	let next_item = CustomMenuItem::new("next".to_string(), "next");
 	let prev_item = CustomMenuItem::new("prev".to_string(), "prev");
-	
+
 	let tray_menu = SystemTrayMenu::new()
-	.add_item(prev_item)
-	.add_item(next_item)
-  .add_native_item(SystemTrayMenuItem::Separator)
-	.add_item(quit)
-  .add_item(hide);
+		.add_item(prev_item)
+		.add_item(next_item)
+		.add_native_item(SystemTrayMenuItem::Separator)
+		.add_item(quit)
+		.add_item(hide);
 	tray_menu
 }
 
@@ -42,18 +42,18 @@ pub fn handle_tray_event(app: &AppHandle, event: SystemTrayEvent) {
     SystemTrayEvent::MenuItemClick { id, .. } => {
       match id.as_str() {
         "quit" => {
-          println!("quit");
-          std::process::exit(0);
+			println!("quit");
+			std::process::exit(0);
         }
         "hide" => {
-          app.get_window("main").unwrap().hide().unwrap();
-					println!("hide");
+			app.get_window("main").unwrap().hide().unwrap();
+			println!("hide");
         }
         "next" => {
-          println!("next");
+			println!("next");
         }
         "prev" => {
-          println!("prev");
+			println!("prev");
         }
         _ => {}
       }
