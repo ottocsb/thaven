@@ -1,6 +1,6 @@
 <div align="center">
     <h1>
-		<a href="https://tov-template.netlify.app/" target="_blank">wallhaven-tauri</a>
+		<a href="https://github.com/ottocsb/tauri-wallhaven" target="_blank">wallhaven-tauri</a>
 	</h1>
     <p>快捷的wallhaven的壁纸软件</p>
 </div>
@@ -8,13 +8,13 @@
 <br />
 <br />
 
-## `node` 版本推荐 🐎
+## `node` 版本推荐
 
 面向现代，所以推荐大家使用 `node` 当前的长期维护版本 `v18`
 
 <br />
 
-## 使用 🐂
+## 使用
 
 建议使用 `pnpm` 包管理器 👉 [安装教程](https://pnpm.io/zh/installation)
 
