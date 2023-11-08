@@ -1,11 +1,11 @@
 [package]
-name = "app"
+name = "tHaven"
 version = "0.1.0"
 description = "A Tauri App"
 authors = ["luck"]
-license = ""
-repository = ""
-default-run = "app"
+license = "MIT"
+repository = "https://github.com/ottocsb/tauri-wallhaven"
+default-run = "tHaven"
 edition = "2021"
 rust-version = "1.60"
 
@@ -16,11 +16,12 @@ tauri-build = { version = "1.5.0", features = [] }
 
 [dependencies]
 serde_json = "1.0.108"
-serde = { version = "1.0.190", features = ["derive"] }
-tauri = { version = "1.5.2", features = ["system-tray"] }
+serde = { version = "1.0.192", features = ["derive"] }
+tauri = { version = "1.5.2", features = [ "api-all", "system-tray" ] }
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3.9", features = ["winuser"] }
+
 [features]
 # this feature is used for production builds or when `devPath` points to the filesystem and the built-in dev server is disabled.
 # If you use cargo directly instead of tauri's cli you can use this feature flag to switch between tauri's `dev` and `build` modes.

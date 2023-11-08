@@ -6,7 +6,7 @@ use std::os::windows::ffi::{OsStrExt};
 mod tray;
 use tray::{build_tray_menu,handle_tray_event};
 fn main() {
-    hello();
+    // hello();
     let tray_menu = build_tray_menu();
     let tray = SystemTray::new().with_menu(tray_menu);
     tauri::Builder::default()
@@ -19,6 +19,7 @@ fn main() {
 
 
 // 这是个很丑的提示框
+// todo
 fn hello () {
     let text = "Hello Rust!";
     let wide: Vec<u16> = std::ffi::OsString::from(text)

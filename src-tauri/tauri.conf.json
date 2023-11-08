@@ -6,7 +6,7 @@
 		"distDir": "../dist"
 	},
 	"package": {
-		"productName": "wallhaven",
+		"productName": "tHaven",
 		"version": "0.1.0"
 	},
 	"tauri": {
@@ -15,7 +15,17 @@
       "iconAsTemplate": true
     },
 		"allowlist": {
-			"all": false
+			"all": true,
+			"http": {
+				"scope": [
+					"http://**",
+					"https://**"
+				]
+			},
+			"shell": {
+				"all": false,
+				"open": true
+			}
 		},
 		"bundle": {
 			"active": true,
@@ -32,7 +42,7 @@
 				"icons/icon.icns",
 				"icons/icon.ico"
 			],
-			"identifier": "com.tauri.dev",
+			"identifier": "com.tHaven.build",
 			"longDescription": "",
 			"macOS": {
 				"entitlements": null,
@@ -51,7 +61,7 @@
 			}
 		},
 		"security": {
-			"csp": null
+			"csp": "default-src 'self' blob: data: filesystem: ws: http: https: 'unsafe-eval' 'unsafe-inline'"
 		},
 		"updater": {
 			"active": false
@@ -61,8 +71,8 @@
 				"fullscreen": false,
 				"height": 600,
 				"resizable": true,
-				"title": "wallhaven",
-				"width": 800
+				"title": "tHaven",
+				"width": 900
 			}
 		]
 	}
