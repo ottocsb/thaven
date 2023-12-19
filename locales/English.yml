@@ -9,3 +9,4 @@ localList: localList
 downloadCenter: downloadCenter
 setup: setup
 about: about
+error: Network timeout or request error, try again later

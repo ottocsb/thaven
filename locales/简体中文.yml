@@ -9,3 +9,4 @@ localList: 本地列表
 downloadCenter: 下载中心
 setup: 设置
 about: 关于
+error: 网络超时或请求失败，稍后重试

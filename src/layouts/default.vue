@@ -1,20 +1,20 @@
 <template>
   <n-space vertical>
-    <n-layout has-sider>
+    <n-layout has-sider position="absolute">
       <n-layout-sider
-          :collapsed-width="50"
-          :width="190"
-          bordered
-          collapse-mode="width"
-          show-trigger
+        :collapsed-width="50"
+        :width="190"
+        bordered
+        collapse-mode="width"
+        show-trigger
       >
-        <Menu/>
+        <Menu />
       </n-layout-sider>
       <n-layout-content bordered min-h-screen>
         <router-view v-slot="{ Component }">
           <transition mode="out-in" name="fade">
             <keep-alive>
-              <component :is="Component"/>
+              <component :is="Component" />
             </keep-alive>
           </transition>
         </router-view>
