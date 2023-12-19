@@ -16,14 +16,11 @@
         "Lokalise.i18n-ally",
         "Vue.volar",
         "steoates.autoimport",
-        "dbaeumer.vscode-eslint",
-        "esbenp.prettier-vscode",
-        "EditorConfig.EditorConfig",
+        "dbaeumer.vscode-eslint", "EditorConfig.EditorConfig",
         "usernamehw.errorlens",
         "shd101wyy.markdown-preview-enhanced",
         "voorjaar.windicss-intellisense",
         "yoavbls.pretty-ts-errors",
-        "bodil.prettier-toml",
         "bungcip.better-toml"
       ]
     }
