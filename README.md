@@ -1,6 +1,6 @@
 <div align="center">
     <h1>
-		<a href="https://github.com/ottocsb/tauri-wallhaven" target="_blank">tHaven</a>
+		<a href="https://github.com/ottocsb/tHaven" target="_blank">tHaven</a>
 	</h1>
     <p>快捷的wallhaven的壁纸软件</p>
 </div>
