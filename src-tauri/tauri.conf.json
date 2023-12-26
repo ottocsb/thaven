@@ -6,7 +6,7 @@
 		"distDir": "../dist"
 	},
 	"package": {
-		"productName": "tHaven",
+		"productName": "thaven",
 		"version": "0.1.0"
 	},
 	"tauri": {
@@ -42,7 +42,7 @@
 				"icons/icon.icns",
 				"icons/icon.ico"
 			],
-			"identifier": "com.tHaven.build",
+			"identifier": "com.thaven.build",
 			"longDescription": "",
 			"macOS": {
 				"entitlements": null,
@@ -71,8 +71,8 @@
 				"fullscreen": false,
 				"height": 600,
 				"resizable": true,
-				"title": "tHaven",
-				"width": 900
+				"title": "thaven",
+				"width": 1000
 			}
 		]
 	}
