@@ -35,7 +35,6 @@ import EnvTypes from 'vite-plugin-env-types'
 import Removelog from 'vite-plugin-removelog'
 import Modules from 'vite-plugin-use-modules'
 import Layouts from 'vite-plugin-vue-meta-layouts'
-import { warmup as Warmup } from 'vite-plugin-warmup'
 
 import I18N from '@intlify/unplugin-vue-i18n/vite'
 import Legacy from '@vitejs/plugin-legacy'
@@ -59,13 +58,8 @@ export default function () {
     EnvTypes({
       dts: 'presets/types/env.d.ts',
     }),
-    /**
-     * 依赖预热，加快渲染 (未来可能会内置到 vite 中)
-     * https://github.com/bluwy/vite-plugin-warmup
-     */
-    Warmup({
-      clientFiles: ['./src/**/*'],
-    }),
+    // https://github.com/bluwy/vite-plugin-warmup (依赖预热，加快渲染)
+    Warmup(),
     /**
      * 文件路由
      * https://github.com/posva/unplugin-vue-router
@@ -304,6 +298,19 @@ function ForceRestart(paths = ['package.json', 'pnpm-lock.yaml']): Plugin {
         if (paths.includes(path))
           await restart()
       })
+    },
+  }
+}
+
+/**
+ * 预热
+ * @description 内置的预热，可以加快冷启动
+ */
+function Warmup(): Plugin {
+  return {
+    name: 'vite-plugin-warmup',
+    config(config) {
+      config?.server?.warmup?.clientFiles?.push('./src/**/*')
     },
   }
 }
