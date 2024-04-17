@@ -11,8 +11,12 @@
       "esnext",
       "dom"
     ],
+		"types": [
+			"unplugin-vue-router/client",
+			"vite-plugin-vue-layouts/client"
+		],
     "resolveJsonModule": true,
-    "moduleResolution": "node",
+		"moduleResolution": "Bundler",
     "useDefineForClassFields": true,
     "baseUrl": ".",
     "paths": {
