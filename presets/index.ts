@@ -34,7 +34,7 @@ import Compression from 'vite-plugin-compression'
 import EnvTypes from 'vite-plugin-env-types'
 import Removelog from 'vite-plugin-removelog'
 import Modules from 'vite-plugin-use-modules'
-import Layouts from 'vite-plugin-vue-meta-layouts'
+import Layouts from 'vite-plugin-vue-layouts'
 
 import I18N from '@intlify/unplugin-vue-i18n/vite'
 import Legacy from '@vitejs/plugin-legacy'
@@ -88,7 +88,13 @@ export default function () {
      * 布局系统
      * https://github.com/dishait/vite-plugin-vue-meta-layouts
      */
-    Layouts(),
+    Layouts(
+      {
+        layoutsDirs: 'src/layouts',
+        pagesDirs: 'src/pages',
+        defaultLayout: 'default',
+      },
+    ),
     /**
      * 组件自动按需引入
      * https://github.com/antfu/unplugin-vue-components
