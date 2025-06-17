@@ -1,6 +1,7 @@
-// http.js
+// http.ts
 
-import { Body, ResponseType, fetch } from '@tauri-apps/api/http'
+import { fetch } from '@tauri-apps/plugin-http';
+
 
 type HttpVerb = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD' | 'OPTIONS' | 'CONNECT' | 'TRACE'
 
@@ -24,12 +25,9 @@ export function http(url: string, opts: opt) {
         'content-type': 'application/json',
         ...headers,
       },
-      responseType: ResponseType.JSON,
       timeout: 60000,
       query,
-      body: Body.json({
-        ...data,
-      }),
+   
     })
       .then(({ data, status }) => {
         if (status === 200) {
