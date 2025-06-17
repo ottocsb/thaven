@@ -1,28 +1,22 @@
 [package]
-name = "t_haven"
+name = "thaven"
 version = "0.1.0"
 description = "A Tauri App"
 authors = ["luck"]
 license = ""
 repository = ""
 edition = "2021"
-default-run = "t_haven"
-rust-version = "1.77.2"
+default-run = "thaven"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
-name = "t_haven_lib"
+name = "thaven_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2.2.0", features = [] }
 
 [dependencies]
-tauri-plugin-http = "2"
-serde_json = "1.0"
-serde = { version = "1.0", features = ["derive"] }
-log = "0.4.27"
+tauri-plugin-http = "2.4.4"
 tauri = { version = "2.5.1", features = [] }
-tauri-plugin-log = "2.5.0"
-winapi = { version = "0.3.9", features = ["winuser"] }

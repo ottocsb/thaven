@@ -1,8 +1,8 @@
 {
-  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "t_haven",
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "thaven",
   "version": "0.1.0",
-  "identifier": "com.t_haven.dev",
+  "identifier": "com.thaven.dev",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5199",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "t_haven",
+        "title": "thaven",
         "width": 800,
         "height": 600,
         "resizable": true,
