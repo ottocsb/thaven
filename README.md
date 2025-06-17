@@ -31,4 +31,3 @@ pnpm install
 ```shell
 cargo tauri dev
 ```
-

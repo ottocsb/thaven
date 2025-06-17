@@ -1,16 +1,12 @@
-import { utimes } from 'node:fs/promises'
 import { argv } from 'node:process'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { isPackageExists } from 'local-pkg'
-import { debounce } from 'perfect-debounce'
-import UnoCss from 'unocss/vite'
+import UnoCSS from 'unocss/vite'
 import AutoImport from 'unplugin-auto-import/vite'
 import {
-  AntDesignVueResolver,
   ArcoResolver,
   DevUiResolver,
-  ElementPlusResolver,
   HeadlessUiResolver,
   IduxResolver,
   InklineResolver,
@@ -19,7 +15,6 @@ import {
   PrimeVueResolver,
   QuasarResolver,
   TDesignResolver,
-  VantResolver,
   VarletUIResolver,
   ViewUiResolver,
   VueUseComponentsResolver,
@@ -27,12 +22,12 @@ import {
 } from 'unplugin-vue-components/resolvers'
 import Components from 'unplugin-vue-components/vite'
 import { VueRouterAutoImports } from 'unplugin-vue-router'
-import Router from 'unplugin-vue-router/vite'
+import VueRouter from 'unplugin-vue-router/vite'
 import { loadEnv } from 'vite'
 import { AutoGenerateImports, vue3Presets } from 'vite-auto-import-resolvers'
 import Compression from 'vite-plugin-compression'
 import EnvTypes from 'vite-plugin-env-types'
-import Removelog from 'vite-plugin-removelog'
+
 import Modules from 'vite-plugin-use-modules'
 import Layouts from 'vite-plugin-vue-layouts'
 
@@ -58,13 +53,11 @@ export default function () {
     EnvTypes({
       dts: 'presets/types/env.d.ts',
     }),
-    // https://github.com/bluwy/vite-plugin-warmup (依赖预热，加快渲染)
-    Warmup(),
     /**
      * 文件路由
      * https://github.com/posva/unplugin-vue-router
      */
-    Router({
+		VueRouter({
       routesFolder: 'src/pages',
       extensions: ['.vue'],
       dts: 'presets/types/type-router.d.ts',
@@ -77,13 +70,7 @@ export default function () {
       auto: true,
       target: 'src/plugins',
     }),
-    /**
-     * vue 官方插件，用来解析 sfc 单文件组件
-     * https://www.npmjs.com/package/@vitejs/plugin-vue
-     */
-    Vue({
-      include: [/\.vue$/],
-    }),
+
     /**
      * 布局系统
      * https://github.com/dishait/vite-plugin-vue-meta-layouts
@@ -95,6 +82,13 @@ export default function () {
         defaultLayout: 'default',
       },
     ),
+		/**
+		 * vue 官方插件，用来解析 sfc 单文件组件
+		 * https://www.npmjs.com/package/@vitejs/plugin-vue
+		 */
+		Vue({
+			include: [/\.vue$/],
+		}),
     /**
      * 组件自动按需引入
      * https://github.com/antfu/unplugin-vue-components
@@ -112,7 +106,6 @@ export default function () {
       ],
       resolvers: normalizeResolvers({
         onlyExist: [
-          [VantResolver(), 'vant'],
           [QuasarResolver(), 'quasar'],
           [DevUiResolver(), 'vue-devui'],
           [NaiveUiResolver(), 'naive-ui'],
@@ -123,10 +116,8 @@ export default function () {
           [VarletUIResolver(), '@varlet/ui'],
           [IduxResolver(), '@idux/components'],
           [InklineResolver(), '@inkline/inkline'],
-          [ElementPlusResolver(), 'element-plus'],
           [HeadlessUiResolver(), '@headlessui/vue'],
           [ArcoResolver(), '@arco-design/web-vue'],
-          [AntDesignVueResolver(), 'ant-design-vue'],
           [VueUseComponentsResolver(), '@vueuse/components'],
           [TDesignResolver({ library: 'vue-next' }), 'tdesign-vue-next'],
         ],
@@ -149,21 +140,10 @@ export default function () {
       algorithm: 'gzip',
     }),
     /**
-     * 生产环境下移除 console.log, console.warn, console.error
-     * https://github.com/dishait/vite-plugin-removelog
-     */
-    // eslint-disable-next-line node/prefer-global/process
-    process.env.NODE_ENV !== 'debug' && Removelog(),
-    /**
      * 别名插件 (内置)
      * 支持 `~` 和 `@` 别名到 `src`
      */
     Alias(),
-    /**
-     * 强制重启 (内置)
-     * 如果 package.json 或 pnpm-lock.yaml 更新的话，强制重启
-     */
-    ForceRestart(),
   ]
 
   if (env.VITE_APP_API_AUTO_IMPORT) {
@@ -187,7 +167,6 @@ export default function () {
         ],
         resolvers: normalizeResolvers({
           onlyExist: [
-            [ElementPlusResolver(), 'element-plus'],
             [TDesignResolver({ library: 'vue-next' }), 'tdesign-vue-next'],
           ],
         }),
@@ -205,7 +184,7 @@ export default function () {
    * https://github.com/unocss/unocss
    */
   plugins.push(
-    UnoCss(),
+      UnoCSS(),
   )
 
   return plugins
@@ -287,36 +266,3 @@ function Alias(): Plugin {
   }
 }
 
-/**
- * 强制重启
- * @description 如果 package.json 或 pnpm-lock.yaml 更新的话，强制重启项目
- */
-function ForceRestart(paths = ['package.json', 'pnpm-lock.yaml']): Plugin {
-  const restart = debounce(async () => {
-    const time = new Date()
-    await utimes('vite.config.ts', time, time)
-  }, 1000)
-  return {
-    name: 'vite-plugin-force-restart',
-    apply: 'serve',
-    configureServer({ watcher }) {
-      watcher.add(paths).on('all', async (_, path) => {
-        if (paths.includes(path))
-          await restart()
-      })
-    },
-  }
-}
-
-/**
- * 预热
- * @description 内置的预热，可以加快冷启动
- */
-function Warmup(): Plugin {
-  return {
-    name: 'vite-plugin-warmup',
-    config(config) {
-      config?.server?.warmup?.clientFiles?.push('./src/**/*')
-    },
-  }
-}

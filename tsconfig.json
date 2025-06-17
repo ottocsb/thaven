@@ -1,4 +1,9 @@
 {
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ],
   "compilerOptions": {
     "strict": true,
     "target": "esnext",
@@ -11,12 +16,12 @@
       "esnext",
       "dom"
     ],
-		"types": [
-			"unplugin-vue-router/client",
-			"vite-plugin-vue-layouts/client"
-		],
+    "types": [
+      "unplugin-vue-router/client",
+      "vite-plugin-vue-layouts/client"
+    ],
     "resolveJsonModule": true,
-		"moduleResolution": "Bundler",
+    "moduleResolution": "Bundler",
     "useDefineForClassFields": true,
     "baseUrl": ".",
     "paths": {
