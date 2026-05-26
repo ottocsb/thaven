@@ -19,4 +19,12 @@ tauri-build = { version = "2.6.2", features = [] }
 
 [dependencies]
 tauri-plugin-http = "2.5.9"
-tauri = { version = "2.11.2", features = [] }
+tauri = { version = "2.11.2", features = ["tray-icon"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+tauri-plugin-dialog = "2.7.1"
+tauri-plugin-opener = "2.5.4"
+image = "0.25"
+
+[dev-dependencies]
+tempfile = "3.27"
