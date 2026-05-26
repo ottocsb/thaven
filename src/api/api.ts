@@ -1,50 +1,102 @@
 import { useRequest } from 'vue-request'
-import type { metaD, searchParams } from '~/plugins/type'
+import { http } from '~/composables/http'
+import useAppSettings from '~/stores/useAppSettings'
+import type { Ref } from 'vue'
+import type {
+  CollectionWallpapersParams,
+  CollectionsResponse,
+  SearchParams,
+  SearchResponse,
+  SettingsResponse,
+  TagResponse,
+  WallpaperResponse,
+} from '~/plugins/type'
 
 enum url {
   search = '/search',
-  setting = '/settings',
-  collect = '/collections',
+  settings = '/settings',
+  collections = '/collections',
   tag = '/tag',
   w = '/w',
 }
 
-/**
- * 搜索
- *
- * @param {string} q 搜索关键字
- * @param {string} categories 分类
- * @param {string} purity 纯净度
- * @param {string} sorting 排序
- * @param {string} order 顺序
- * @param {string} topRange 顶部范围
- * @param {string} atleast 最小
- * @param {string} resolution 分辨率
- * @param {string} ratio 比例
- * @param {string} colors 颜色
- * @param {string} page 页数
- * @param {string} seed 种子
- * @example const {data, loading, error, runAsync} = search()
- * @returns {data, loading, error, runAsync}
- *
- */
+function getApikey() {
+  return useAppSettings().apikey || undefined
+}
+
+function withApikey<T extends { apikey?: string, purity?: string | string[] }>(query?: T) {
+  const apikey = query?.apikey || getApikey()
+  const next = { ...query }
+
+  if (apikey) {
+    next.apikey = apikey
+    return next
+  }
+
+  if (typeof next.purity === 'string' && next.purity.length >= 3 && next.purity[2] === '1') {
+    const purity = `${next.purity.slice(0, 2)}0`
+    next.purity = purity === '000' ? '100' : purity
+  }
+
+  return next
+}
 
 export function search() {
   const { data, loading, error, runAsync } = useRequest(
-    (query?: searchParams) => http(url.search, { query }),
+    (query?: SearchParams) => http<SearchResponse>(url.search, { query: withApikey(query) }),
     { manual: true },
   )
-  return { data: data as Ref<metaD>, loading, error, runAsync }
+  return { data: data as Ref<SearchResponse>, loading, error, runAsync }
 }
 
-export function getSeeting() {
+export function getWallpaper() {
   const { data, loading, error, runAsync } = useRequest(
-    (apikey: string) => http(url.setting, {
-      query: {
-        apikey,
-      },
-    }),
+    (id: string, apikey?: string) => http<WallpaperResponse>(`${url.w}/${id}`, { query: withApikey({ apikey }) }),
     { manual: true },
   )
   return { data, loading, error, runAsync }
+}
+
+export function getTag() {
+  const { data, loading, error, runAsync } = useRequest(
+    (id: number | string) => http<TagResponse>(`${url.tag}/${id}`),
+    { manual: true },
+  )
+  return { data, loading, error, runAsync }
+}
+
+export function getSettings() {
+  const { data, loading, error, runAsync } = useRequest(
+    (apikey?: string) => http<SettingsResponse>(url.settings, { query: withApikey({ apikey }) }),
+    { manual: true },
+  )
+  return { data, loading, error, runAsync }
+}
+
+export const getSetting = getSettings
+export const getSeeting = getSettings
+
+export function getCollections() {
+  const { data, loading, error, runAsync } = useRequest(
+    (apikey?: string) => http<CollectionsResponse>(url.collections, { query: withApikey({ apikey }) }),
+    { manual: true },
+  )
+  return { data, loading, error, runAsync }
+}
+
+export function getUserCollections() {
+  const { data, loading, error, runAsync } = useRequest(
+    (username: string) => http<CollectionsResponse>(`${url.collections}/${username}`),
+    { manual: true },
+  )
+  return { data, loading, error, runAsync }
+}
+
+export function getCollectionWallpapers() {
+  const { data, loading, error, runAsync } = useRequest(
+    (username: string, id: number | string, query?: CollectionWallpapersParams) =>
+      http<SearchResponse>(`${url.collections}/${username}/${id}`, { query: withApikey(query) }),
+    { manual: true },
+  )
+  return { data: data as Ref<SearchResponse>, loading, error, runAsync }
 }
