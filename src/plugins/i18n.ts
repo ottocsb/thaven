@@ -6,13 +6,14 @@ const yamlS = import.meta.glob('../../locales/*/**.y(a)?ml', {
 })
 
 const languages = Object.entries(yamlS).map(([key, value]) => {
+  const module = value as { default: Record<string, unknown> }
   const yaml = key.endsWith('.yaml')
   key = key.slice(14, yaml ? -5 : -4)
   // 如果有子模块，则分割
   if (key.includes('/'))
     key = key.split('/')[0]
 
-  return { [key]: value.default }
+  return { [key]: module.default }
 })
 
 const messages = defu({}, ...languages)
@@ -29,6 +30,6 @@ export const i18n = createI18n({
 
 // 同步本地 localStorage 和 i18n
 // https://vueuse.org/shared/syncRef/#syncref
-syncRef(storageLocale, i18n.global.locale)
+syncRef(storageLocale, i18n.global.locale as unknown as typeof storageLocale)
 
 export default i18n

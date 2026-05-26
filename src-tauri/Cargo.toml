@@ -15,8 +15,8 @@ name = "thaven_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2.2.0", features = [] }
+tauri-build = { version = "2.6.2", features = [] }
 
 [dependencies]
-tauri-plugin-http = "2.4.4"
-tauri = { version = "2.5.1", features = [] }
+tauri-plugin-http = "2.5.9"
+tauri = { version = "2.11.2", features = [] }

@@ -1,5 +1,6 @@
 <script lang="ts" setup>
 const typedRef = useTyped([' is not found!'])
+void typedRef
 </script>
 
 <template>

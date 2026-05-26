@@ -1,5 +1,5 @@
 import { useRequest } from 'vue-request'
-import { invoke } from '@tauri-apps/api'
+import { invoke } from '@tauri-apps/api/core'
 
 // Interact with the backend.
 enum url {
