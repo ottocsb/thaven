@@ -1,6 +1,8 @@
 <script lang="ts" setup>
-import { revealItemInDir } from '@tauri-apps/plugin-opener'
+import { convertFileSrc } from '@tauri-apps/api/core'
 import { useMessage } from 'naive-ui'
+import { onMounted } from 'vue'
+import { ensureDownloadDir, openInFileManager } from '~/api/invoke'
 import useDownloadTasks from '~/stores/useDownloadTasks'
 import type { DownloadTask, DownloadTaskStatus } from '~/stores/useDownloadTasks'
 
@@ -27,6 +29,47 @@ function statusType(status: DownloadTaskStatus) {
   return 'error'
 }
 
+function progressStatus(status: DownloadTaskStatus) {
+  if (status === 'completed')
+    return 'success'
+
+  if (status === 'failed')
+    return 'error'
+
+  return 'default'
+}
+
+function taskProgress(task: DownloadTask) {
+  if (task.status === 'completed')
+    return 100
+
+  const progress = Number.isFinite(task.progress) ? task.progress : 0
+  return Math.max(0, Math.min(100, Math.round(progress)))
+}
+
+function formatFileSize(size: number) {
+  if (size < 1024)
+    return `${size} B`
+
+  if (size < 1024 * 1024)
+    return `${(size / 1024).toFixed(1)} KB`
+
+  return `${(size / 1024 / 1024).toFixed(1)} MB`
+}
+
+function progressText(task: DownloadTask) {
+  const downloaded = task.downloadedBytes || 0
+  const total = task.totalBytes || 0
+
+  if (total)
+    return `${formatFileSize(downloaded)} / ${formatFileSize(total)}`
+
+  if (downloaded)
+    return formatFileSize(downloaded)
+
+  return '等待开始'
+}
+
 function formatDate(value: number | null) {
   if (!value)
     return '-'
@@ -38,6 +81,33 @@ function displayPath(task: DownloadTask) {
   return task.localPath || task.directory || '尚未生成文件'
 }
 
+function thumbnailSrc(task: DownloadTask) {
+  if (task.localPath)
+    return convertFileSrc(task.localPath)
+
+  if (task.thumbUrl)
+    return task.thumbUrl
+
+  return ''
+}
+
+function taskDirectory(task: DownloadTask) {
+  if (task.directory)
+    return task.directory
+
+  return task.localPath.split(/[\\/]/).slice(0, -1).join('\\') || undefined
+}
+
+async function allowDownloadedImages() {
+  const directories = Array.from(new Set(
+    downloadTasks.tasks
+      .filter(task => task.localPath)
+      .map(taskDirectory),
+  ))
+
+  await Promise.all(directories.map(directory => ensureDownloadDir(directory)))
+}
+
 async function showInFolder(task: DownloadTask) {
   if (!task.localPath) {
     message.warning('文件尚未下载完成')
@@ -45,7 +115,7 @@ async function showInFolder(task: DownloadTask) {
   }
 
   try {
-    await revealItemInDir(task.localPath)
+    await openInFileManager(task.localPath)
   }
   catch (err) {
     message.error(err instanceof Error ? err.message : '显示文件位置失败')
@@ -61,6 +131,12 @@ async function retry(task: DownloadTask) {
     message.error(err instanceof Error ? err.message : '下载失败')
   }
 }
+
+onMounted(() => {
+  allowDownloadedImages().catch((err) => {
+    message.error(err instanceof Error ? err.message : '读取下载缩略图失败')
+  })
+})
 </script>
 
 <template>
@@ -87,17 +163,41 @@ async function retry(task: DownloadTask) {
       <n-list v-else bordered>
         <n-list-item v-for="task in downloadTasks.tasks" :key="task.id">
           <div class="task-row">
+            <div class="task-thumb">
+              <img
+                v-if="thumbnailSrc(task)"
+                :alt="task.filename"
+                loading="lazy"
+                :src="thumbnailSrc(task)"
+              >
+              <span v-else>无图</span>
+            </div>
+
             <div class="task-info">
               <div class="task-title">
                 <strong :title="task.filename">{{ task.filename }}</strong>
                 <n-tag size="small" :type="statusType(task.status)">
                   {{ statusText(task.status) }}
                 </n-tag>
+                <n-tag v-if="task.alreadyExists" size="small" type="warning">
+                  已存在
+                </n-tag>
               </div>
 
               <div class="task-meta">
                 <span>开始：{{ formatDate(task.startedAt) }}</span>
                 <span>结束：{{ formatDate(task.finishedAt) }}</span>
+              </div>
+
+              <div class="task-progress">
+                <n-progress
+                  :height="6"
+                  :percentage="taskProgress(task)"
+                  :processing="task.status === 'downloading'"
+                  :status="progressStatus(task.status)"
+                  type="line"
+                />
+                <span>{{ progressText(task) }}</span>
               </div>
 
               <div class="task-path" :title="displayPath(task)">
@@ -160,9 +260,30 @@ async function retry(task: DownloadTask) {
   justify-content: space-between;
 }
 
+.task-thumb {
+  align-items: center;
+  aspect-ratio: 3 / 2;
+  background: var(--n-color-embedded);
+  border-radius: 6px;
+  color: var(--n-text-color-3);
+  display: flex;
+  flex: 0 0 120px;
+  font-size: 12px;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.task-thumb img {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
 .task-info {
   display: grid;
   gap: 6px;
+  flex: 1;
   min-width: 0;
 }
 
@@ -186,6 +307,19 @@ async function retry(task: DownloadTask) {
   gap: 12px;
 }
 
+.task-progress {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(160px, 1fr) auto;
+}
+
+.task-progress span {
+  color: var(--n-text-color-3);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .task-error {
   color: #d03050;
   font-size: 13px;
@@ -200,6 +334,15 @@ async function retry(task: DownloadTask) {
   .task-row {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .task-thumb {
+    flex-basis: auto;
+    width: 160px;
+  }
+
+  .task-progress {
+    grid-template-columns: 1fr;
   }
 }
 </style>
