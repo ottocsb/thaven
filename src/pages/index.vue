@@ -1,8 +1,10 @@
 <script lang="ts" setup>
+import { Refresh, Search as SearchIcon } from '@vicons/ionicons5'
 import { useMessage } from 'naive-ui'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { search } from '~/api/api'
 import { setWallpaper as setSystemWallpaper } from '~/api/invoke'
+import PreviewInfoOverlay from '~/components/PreviewInfoOverlay.vue'
 import useDownloadTasks from '~/stores/useDownloadTasks'
 import useAppSettings from '~/stores/useAppSettings'
 import type { SearchParams, SearchResponse, Wallpaper } from '~/plugins/type'
@@ -43,6 +45,9 @@ const lastError = ref('')
 const sentinelRef = ref<HTMLElement | null>(null)
 const downloadingIds = ref<string[]>([])
 const settingWallpaperIds = ref<string[]>([])
+const resolutionPreset = ref('')
+const ratioPreset = ref('')
+const colorPreset = ref('')
 
 let observer: IntersectionObserver | null = null
 
@@ -82,9 +87,66 @@ const topRangeOptions = [
   { label: '1 年', value: '1y' },
 ]
 
+const resolutionOptions = [
+  { label: '分辨率', value: '' },
+  {
+    type: 'group',
+    label: '至少',
+    key: 'atleast',
+    children: [
+      { label: '至少 1280x720', value: 'atleast:1280x720' },
+      { label: '至少 1600x900', value: 'atleast:1600x900' },
+      { label: '至少 1920x1080', value: 'atleast:1920x1080' },
+      { label: '至少 2560x1440', value: 'atleast:2560x1440' },
+      { label: '至少 3840x2160', value: 'atleast:3840x2160' },
+    ],
+  },
+  {
+    type: 'group',
+    label: '精确',
+    key: 'exactly',
+    children: [
+      { label: '1280x720', value: 'exact:1280x720' },
+      { label: '1600x900', value: 'exact:1600x900' },
+      { label: '1920x1080', value: 'exact:1920x1080' },
+      { label: '2560x1440', value: 'exact:2560x1440' },
+      { label: '3840x2160', value: 'exact:3840x2160' },
+      { label: '3440x1440', value: 'exact:3440x1440' },
+    ],
+  },
+]
+
+const ratioOptions = [
+  { label: '比例', value: '' },
+  { label: '横屏', value: 'landscape' },
+  { label: '竖屏', value: 'portrait' },
+  { label: '16x9', value: '16x9' },
+  { label: '16x10', value: '16x10' },
+  { label: '21x9', value: '21x9' },
+  { label: '32x9', value: '32x9' },
+  { label: '4x3', value: '4x3' },
+  { label: '1x1', value: '1x1' },
+]
+
+const colorOptions = [
+  { label: '颜色', value: '' },
+  { label: '红色', value: 'cc0000' },
+  { label: '粉色', value: 'ea4c88' },
+  { label: '紫色', value: '993399' },
+  { label: '蓝色', value: '0066cc' },
+  { label: '青色', value: '66cccc' },
+  { label: '绿色', value: '77cc33' },
+  { label: '黄色', value: 'ffff00' },
+  { label: '橙色', value: 'ff9900' },
+  { label: '黑色', value: '000000' },
+  { label: '白色', value: 'ffffff' },
+]
+
 const hasMore = computed(() => currentPage.value > 0 && currentPage.value < lastPage.value)
 const isLoading = computed(() => loadingFirstPage.value || loadingMore.value)
 const canShowEmpty = computed(() => !loadingFirstPage.value && !lastError.value && wallpapers.value.length === 0)
+const categorySummary = computed(() => summarizeOptions(form.categories, categoryOptions, '分类'))
+const puritySummary = computed(() => summarizeOptions(form.purity, purityOptions.value, '纯度'))
 
 watch(
   () => settings.apikey,
@@ -102,6 +164,28 @@ watch(
   },
 )
 
+watch(resolutionPreset, (preset) => {
+  form.atleast = ''
+  form.resolutions = ''
+
+  if (!preset)
+    return
+
+  const [mode, value] = preset.split(':')
+  if (mode === 'atleast')
+    form.atleast = value
+  else
+    form.resolutions = value
+})
+
+watch(ratioPreset, (preset) => {
+  form.ratios = preset
+})
+
+watch(colorPreset, (preset) => {
+  form.colors = preset
+})
+
 function toFlag(values: string[], keys: string[]) {
   const flag = keys.map(key => values.includes(key) ? '1' : '0').join('')
   return flag === '000' ? '100' : flag
@@ -113,6 +197,16 @@ function normalizeCsv(value: string) {
     .map(item => item.trim().replace(/^#/, ''))
     .filter(Boolean)
     .join(',')
+}
+
+function summarizeOptions(values: string[], options: Array<{ label: string, value: string }>, label: string) {
+  if (values.length === options.length)
+    return `${label}：全部`
+
+  if (values.length === 0)
+    return `${label}：未选`
+
+  return `${label}：${options.filter(item => values.includes(item.value)).map(item => item.label).join('/')}`
 }
 
 function buildQuery(page: number): SearchParams {
@@ -248,11 +342,16 @@ async function downloadToLocal(wallpaper: Wallpaper, showSuccess = true) {
     const path = await downloadTasks.startDownload({
       url: wallpaper.path,
       filename: getDownloadFilename(wallpaper),
+      thumbUrl: wallpaper.thumbs.small,
       directory,
     })
-    if (showSuccess)
-      message.success(`已下载到：${path}`)
-    return path
+    if (showSuccess) {
+      if (path.alreadyExists)
+        message.warning(`已下载过：${path.path}`)
+      else
+        message.success(`已下载到：${path.path}`)
+    }
+    return path.path
   }
   catch (err) {
     message.error(err instanceof Error ? err.message : '下载失败')
@@ -321,24 +420,37 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="online-page">
-    <Navigation />
-
     <n-space vertical size="large">
-      <n-card size="small" title="在线壁纸">
-        <n-form label-placement="top">
-          <n-grid cols="1 s:2 m:3 l:4" responsive="screen" :x-gap="12" :y-gap="8">
-            <n-form-item-gi label="关键词">
-              <n-input
-                v-model:value="form.q"
-                clearable
-                placeholder="输入关键词"
-                @keyup.enter="submitSearch"
-              />
-            </n-form-item-gi>
+      <n-card class="search-card" size="small" :bordered="false" content-style="padding: 0;">
+        <div class="searchbar">
+          <n-input
+            v-model:value="form.q"
+            class="search-keyword"
+            clearable
+            placeholder="搜索关键词（英文）"
+            size="small"
+            @keyup.enter="submitSearch"
+          >
+            <template #prefix>
+              <n-icon>
+                <SearchIcon />
+              </n-icon>
+            </template>
+          </n-input>
 
-            <n-form-item-gi label="分类">
-              <n-checkbox-group v-model:value="form.categories">
-                <n-space>
+          <n-popover trigger="click" placement="bottom-start">
+            <template #trigger>
+              <n-button class="search-filter-trigger" size="small">
+                {{ categorySummary }}
+              </n-button>
+            </template>
+
+            <div class="search-filter-panel">
+              <div class="search-filter-title">
+                分类
+              </div>
+              <n-checkbox-group v-model:value="form.categories" size="small">
+                <n-space vertical size="small">
                   <n-checkbox
                     v-for="item in categoryOptions"
                     :key="item.value"
@@ -347,11 +459,22 @@ onBeforeUnmount(() => {
                   />
                 </n-space>
               </n-checkbox-group>
-            </n-form-item-gi>
+            </div>
+          </n-popover>
 
-            <n-form-item-gi label="纯度">
-              <n-checkbox-group v-model:value="form.purity">
-                <n-space>
+          <n-popover trigger="click" placement="bottom-start">
+            <template #trigger>
+              <n-button class="search-filter-trigger" size="small">
+                {{ puritySummary }}
+              </n-button>
+            </template>
+
+            <div class="search-filter-panel">
+              <div class="search-filter-title">
+                纯度
+              </div>
+              <n-checkbox-group v-model:value="form.purity" size="small">
+                <n-space vertical size="small">
                   <n-checkbox
                     v-for="item in purityOptions"
                     :key="item.value"
@@ -361,56 +484,88 @@ onBeforeUnmount(() => {
                   />
                 </n-space>
               </n-checkbox-group>
-            </n-form-item-gi>
+            </div>
+          </n-popover>
 
-            <n-form-item-gi label="排序">
-              <n-select v-model:value="form.sorting" :options="sortingOptions" />
-            </n-form-item-gi>
+          <n-select
+            v-model:value="resolutionPreset"
+            class="search-resolution"
+            :consistent-menu-width="false"
+            :options="resolutionOptions"
+            size="small"
+          />
 
-            <n-form-item-gi label="顺序">
-              <n-select v-model:value="form.order" :options="orderOptions" />
-            </n-form-item-gi>
+          <n-select
+            v-model:value="ratioPreset"
+            class="search-ratio"
+            :consistent-menu-width="false"
+            :options="ratioOptions"
+            size="small"
+          />
 
-            <n-form-item-gi label="排行范围">
-              <n-select
-                v-model:value="form.topRange"
-                :disabled="form.sorting !== 'toplist'"
-                :options="topRangeOptions"
-              />
-            </n-form-item-gi>
+          <n-select
+            v-model:value="colorPreset"
+            class="search-color"
+            :consistent-menu-width="false"
+            :options="colorOptions"
+            size="small"
+          />
 
-            <n-form-item-gi label="最小分辨率">
-              <n-input v-model:value="form.atleast" clearable placeholder="1920x1080" />
-            </n-form-item-gi>
+          <n-select
+            v-model:value="form.sorting"
+            class="search-sort"
+            :consistent-menu-width="false"
+            :options="sortingOptions"
+            size="small"
+          />
 
-            <n-form-item-gi label="精确分辨率">
-              <n-input v-model:value="form.resolutions" clearable placeholder="1920x1080,2560x1440" />
-            </n-form-item-gi>
+          <n-radio-group v-model:value="form.order" class="search-order" size="small">
+            <n-radio-button
+              v-for="item in orderOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            />
+          </n-radio-group>
 
-            <n-form-item-gi label="比例">
-              <n-input v-model:value="form.ratios" clearable placeholder="16x9,16x10" />
-            </n-form-item-gi>
+          <n-select
+            v-if="form.sorting === 'toplist'"
+            v-model:value="form.topRange"
+            class="search-top-range"
+            :consistent-menu-width="false"
+            :options="topRangeOptions"
+            size="small"
+          />
 
-            <n-form-item-gi label="颜色">
-              <n-input v-model:value="form.colors" clearable placeholder="660000 或 #660000" />
-            </n-form-item-gi>
+          <n-input
+            v-if="form.sorting === 'random'"
+            v-model:value="form.seed"
+            class="search-seed"
+            clearable
+            placeholder="Seed"
+            size="small"
+          />
 
-            <n-form-item-gi label="随机 Seed">
-              <n-input
-                v-model:value="form.seed"
-                :disabled="form.sorting !== 'random'"
-                clearable
-                placeholder="random 时可用"
-              />
-            </n-form-item-gi>
-
-            <n-form-item-gi label="操作">
-              <n-button type="primary" block :loading="loadingFirstPage" @click="submitSearch">
-                搜索
+          <n-tooltip>
+            <template #trigger>
+              <n-button
+                class="search-submit"
+                circle
+                type="primary"
+                :loading="loadingFirstPage"
+                size="small"
+                @click="submitSearch"
+              >
+                <template #icon>
+                  <n-icon>
+                    <Refresh />
+                  </n-icon>
+                </template>
               </n-button>
-            </n-form-item-gi>
-          </n-grid>
-        </n-form>
+            </template>
+            搜索
+          </n-tooltip>
+        </div>
       </n-card>
 
       <n-alert v-if="!settings.apikey" type="info" closable>
@@ -448,27 +603,28 @@ onBeforeUnmount(() => {
             size="small"
           >
             <button class="thumb-button" type="button" @click="openPreview(wallpaper)">
-              <img :alt="wallpaper.id" class="thumb" loading="lazy" :src="wallpaper.thumbs.small">
+              <img :alt="wallpaper.resolution" class="thumb" loading="lazy" :src="wallpaper.thumbs.small">
             </button>
 
             <div class="card-body">
               <div class="card-title">
                 <span>{{ wallpaper.resolution }}</span>
-                <span>{{ wallpaper.id }}</span>
               </div>
 
-              <n-space size="small">
-                <n-tag size="small" :type="tagType(wallpaper.category)">
-                  {{ wallpaper.category }}
-                </n-tag>
-                <n-tag size="small" :type="tagType(wallpaper.purity)">
-                  {{ wallpaper.purity }}
-                </n-tag>
-              </n-space>
+              <div class="card-info">
+                <n-space size="small" :wrap="false">
+                  <n-tag size="small" :type="tagType(wallpaper.category)">
+                    {{ wallpaper.category }}
+                  </n-tag>
+                  <n-tag size="small" :type="tagType(wallpaper.purity)">
+                    {{ wallpaper.purity }}
+                  </n-tag>
+                </n-space>
 
-              <div class="card-meta">
-                <span>{{ formatFileSize(wallpaper.file_size) }}</span>
-                <span>{{ wallpaper.file_type.replace('image/', '').toUpperCase() }}</span>
+                <div class="card-meta">
+                  <span>{{ formatFileSize(wallpaper.file_size) }}</span>
+                  <span>{{ wallpaper.file_type.replace('image/', '').toUpperCase() }}</span>
+                </div>
               </div>
 
               <n-space>
@@ -504,35 +660,34 @@ onBeforeUnmount(() => {
     </n-space>
 
     <n-modal v-model:show="showPreview" preset="card" class="preview-modal" title="壁纸预览">
-      <div v-if="selectedWallpaper" class="preview-content">
-        <n-image
-          class="preview-image"
-          object-fit="contain"
-          :src="selectedWallpaper.path"
-          :preview-disabled="true"
-        />
-
-        <div class="preview-info">
-          <n-descriptions bordered label-placement="left" :column="1" size="small">
-            <n-descriptions-item label="ID">
-              {{ selectedWallpaper.id }}
-            </n-descriptions-item>
-            <n-descriptions-item label="分辨率">
-              {{ selectedWallpaper.resolution }}
-            </n-descriptions-item>
-            <n-descriptions-item label="大小">
-              {{ formatFileSize(selectedWallpaper.file_size) }}
-            </n-descriptions-item>
-            <n-descriptions-item label="类型">
-              {{ selectedWallpaper.file_type }}
-            </n-descriptions-item>
-            <n-descriptions-item label="上传者">
-              {{ selectedWallpaper.uploader?.username || '未知' }}
-            </n-descriptions-item>
-            <n-descriptions-item label="来源">
-              {{ selectedWallpaper.source || '无' }}
-            </n-descriptions-item>
-          </n-descriptions>
+      <PreviewInfoOverlay
+        v-if="selectedWallpaper"
+        :alt="selectedWallpaper.resolution"
+        :src="selectedWallpaper.path"
+      >
+        <template #info>
+          <div class="preview-meta">
+            <span class="preview-meta-item">
+              <span class="preview-meta-label">分辨率</span>
+              <span class="preview-meta-value">{{ selectedWallpaper.resolution }}</span>
+            </span>
+            <span class="preview-meta-item">
+              <span class="preview-meta-label">大小</span>
+              <span class="preview-meta-value">{{ formatFileSize(selectedWallpaper.file_size) }}</span>
+            </span>
+            <span class="preview-meta-item">
+              <span class="preview-meta-label">类型</span>
+              <span class="preview-meta-value">{{ selectedWallpaper.file_type }}</span>
+            </span>
+            <span class="preview-meta-item">
+              <span class="preview-meta-label">分类</span>
+              <span class="preview-meta-value">{{ selectedWallpaper.category }}</span>
+            </span>
+            <span class="preview-meta-item">
+              <span class="preview-meta-label">纯度</span>
+              <span class="preview-meta-value">{{ selectedWallpaper.purity }}</span>
+            </span>
+          </div>
 
           <n-space v-if="selectedWallpaper.tags?.length" class="tag-list" size="small">
             <n-tag v-for="tag in selectedWallpaper.tags" :key="tag.id" size="small">
@@ -540,7 +695,7 @@ onBeforeUnmount(() => {
             </n-tag>
           </n-space>
 
-          <n-space>
+          <n-space class="preview-actions">
             <n-button
               type="primary"
               :loading="isDownloading(selectedWallpaper.id)"
@@ -555,8 +710,8 @@ onBeforeUnmount(() => {
               设置当前壁纸
             </n-button>
           </n-space>
-        </div>
-      </div>
+        </template>
+      </PreviewInfoOverlay>
     </n-modal>
   </div>
 </template>
@@ -565,6 +720,88 @@ onBeforeUnmount(() => {
 .online-page {
   min-width: 720px;
   padding: 0 24px 32px;
+}
+
+.search-card {
+  border-radius: 4px;
+}
+
+.searchbar {
+  align-items: center;
+  display: flex;
+  font-size: 13px;
+  gap: 4px;
+  min-height: 44px;
+  overflow-x: auto;
+  padding: 8px 10px;
+  scrollbar-width: thin;
+  white-space: nowrap;
+}
+
+.search-keyword {
+  flex: 0 0 230px;
+}
+
+.search-resolution {
+  flex: 0 0 88px;
+}
+
+.search-ratio,
+.search-color {
+  flex: 0 0 68px;
+}
+
+.search-sort {
+  flex: 0 0 72px;
+}
+
+.search-top-range,
+.search-seed {
+  flex: 0 0 96px;
+}
+
+.search-order {
+  flex: 0 0 auto;
+}
+
+.search-filter-trigger {
+  flex: 0 0 112px;
+  justify-content: flex-start;
+  overflow: hidden;
+}
+
+.search-submit {
+  flex: 0 0 auto;
+}
+
+.searchbar :deep(.n-input),
+.searchbar :deep(.n-base-selection) {
+  border-radius: 2px;
+}
+
+.searchbar :deep(.n-radio-button) {
+  border-radius: 2px;
+}
+
+.search-filter-trigger :deep(.n-button__content) {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search-order :deep(.n-radio-button) {
+  min-width: 40px;
+}
+
+.search-filter-panel {
+  min-width: 120px;
+}
+
+.search-filter-title {
+  color: var(--n-text-color-2);
+  font-size: 12px;
+  margin-bottom: 8px;
 }
 
 .toolbar-line {
@@ -609,11 +846,20 @@ onBeforeUnmount(() => {
 }
 
 .card-title,
+.card-info,
 .card-meta {
   align-items: center;
   display: flex;
   gap: 8px;
   justify-content: space-between;
+}
+
+.card-info {
+  min-width: 0;
+}
+
+.card-info :deep(.n-space) {
+  min-width: 0;
 }
 
 .card-title {
@@ -640,23 +886,6 @@ onBeforeUnmount(() => {
   width: 88vw;
 }
 
-.preview-content {
-  display: grid;
-  gap: 16px;
-  grid-template-columns: minmax(0, 1fr) 320px;
-}
-
-.preview-image {
-  max-height: 72vh;
-  width: 100%;
-}
-
-.preview-info {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
 .tag-list {
   max-height: 160px;
   overflow: auto;
@@ -668,8 +897,8 @@ onBeforeUnmount(() => {
     padding: 0 12px 24px;
   }
 
-  .preview-content {
-    grid-template-columns: 1fr;
+  .searchbar {
+    padding: 8px;
   }
 }
 </style>
