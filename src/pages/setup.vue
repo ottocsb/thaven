@@ -1,9 +1,8 @@
 <script lang="ts" setup>
 import { open, confirm } from '@tauri-apps/plugin-dialog'
-import { openPath } from '@tauri-apps/plugin-opener'
 import { useMessage } from 'naive-ui'
 import { onMounted, ref } from 'vue'
-import { ensureDownloadDir, getDefaultDownloadDir } from '~/api/invoke'
+import { ensureDownloadDir, getDefaultDownloadDir, openInFileManager } from '~/api/invoke'
 import useAppSettings from '~/stores/useAppSettings'
 import useDownloadTasks from '~/stores/useDownloadTasks'
 
@@ -59,7 +58,7 @@ async function openDownloadDir() {
     const result = await ensureDownloadDir(downloadDir.value)
     downloadDir.value = result.path
     settings.setDownloadDir(result.path)
-    await openPath(result.path)
+    await openInFileManager(result.path)
   }
   catch (err) {
     message.error(err instanceof Error ? err.message : '打开下载目录失败')

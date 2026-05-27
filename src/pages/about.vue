@@ -9,7 +9,6 @@ const version = ref('0.1.0')
 
 const links = [
   { label: '项目仓库', url: 'https://github.com/ottocsb/thaven' },
-  { label: '上游项目', url: 'https://github.com/leoFitz1024/wallhaven' },
   { label: 'Wallhaven API 文档', url: 'https://wallhaven.cc/help/api' },
 ]
 
@@ -18,7 +17,7 @@ async function openExternal(url: string) {
     await openUrl(url)
   }
   catch (err) {
-    message.error(err instanceof Error ? err.message : '打开链接失败')
+    message.error(err instanceof Error ? err.message : String(err || '打开链接失败'))
   }
 }
 

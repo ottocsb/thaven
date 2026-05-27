@@ -45,7 +45,6 @@ const menuOptions = [
   },
 ]
 function handleUpdateValue(value: any) {
-  console.log(value)
   router.push({ path: value })
 }
 </script>
