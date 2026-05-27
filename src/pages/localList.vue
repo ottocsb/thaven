@@ -1,35 +1,166 @@
+<script lang="ts">
+import type { LocalWallpaper } from '~/api/invoke'
+
+interface LocalWallpaperCache {
+  directory: string
+  wallpapers: LocalWallpaper[]
+  page: number
+  lastPage: number
+  total: number
+}
+
+let localWallpaperCache: LocalWallpaperCache | null = null
+</script>
+
 <script lang="ts" setup>
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { confirm } from '@tauri-apps/plugin-dialog'
-import { openPath, revealItemInDir } from '@tauri-apps/plugin-opener'
 import { useMessage } from 'naive-ui'
-import { onMounted, ref, watch } from 'vue'
+import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
+import PreviewInfoOverlay from '~/components/PreviewInfoOverlay.vue'
 import {
   deleteLocalWallpaper,
   ensureDownloadDir,
+  generateLocalThumbnail,
   getDefaultDownloadDir,
+  openInFileManager,
   scanLocalWallpapers,
   setWallpaper,
 } from '~/api/invoke'
 import useAppSettings from '~/stores/useAppSettings'
-import type { LocalWallpaper } from '~/api/invoke'
+
+defineOptions({
+  name: 'LocalListPage',
+})
 
 const settings = useAppSettings()
 const message = useMessage()
-const directory = ref(settings.downloadDir)
-const wallpapers = ref<LocalWallpaper[]>([])
+const cachedWallpapers = localWallpaperCache as LocalWallpaperCache | null
+const directory = ref(cachedWallpapers?.directory || settings.downloadDir)
+const wallpapers = ref<LocalWallpaper[]>(cachedWallpapers?.wallpapers || [])
 const selectedWallpaper = ref<LocalWallpaper | null>(null)
 const showPreview = ref(false)
 const loading = ref(false)
-const page = ref(1)
+const page = ref(cachedWallpapers?.page || 1)
 const pageSize = 30
-const lastPage = ref(1)
-const total = ref(0)
+const lastPage = ref(cachedWallpapers?.lastPage || 1)
+const total = ref(cachedWallpapers?.total || 0)
+const renderCount = ref(0)
+const displayedWallpapers = computed(() => wallpapers.value.slice(0, renderCount.value))
+const thumbnails = ref<Record<string, string>>({})
+const thumbnailFailed = ref<Record<string, boolean>>({})
+const thumbnailConcurrency = 4
+let loadId = 0
+let thumbnailQueueId = 0
+let isActive = true
+let hasBeenDeactivated = false
+let renderTimer: number | undefined
+let thumbnailQueue: LocalWallpaper[] = []
+let thumbnailWorkerCount = 0
+const thumbnailLoading = new Set<string>()
+
+function afterPagePaint(callback: () => void) {
+  window.requestAnimationFrame(() => {
+    window.requestAnimationFrame(callback)
+  })
+}
+
+function stopRenderQueue() {
+  if (renderTimer !== undefined) {
+    window.clearTimeout(renderTimer)
+    renderTimer = undefined
+  }
+}
+
+function startRenderQueue() {
+  stopRenderQueue()
+  renderCount.value = Math.min(8, wallpapers.value.length)
+
+  function renderMore() {
+    renderCount.value = Math.min(renderCount.value + 8, wallpapers.value.length)
+
+    if (renderCount.value < wallpapers.value.length)
+      renderTimer = window.setTimeout(renderMore, 80)
+  }
+
+  if (renderCount.value < wallpapers.value.length)
+    renderTimer = window.setTimeout(renderMore, 120)
+}
+
+function resetThumbnailQueue() {
+  thumbnailQueue = []
+  thumbnailLoading.clear()
+  thumbnailQueueId += 1
+}
+
+function isThumbnailQueued(path: string) {
+  return thumbnailQueue.some(item => item.path === path)
+}
+
+function enqueueDisplayedThumbnails() {
+  for (const item of displayedWallpapers.value) {
+    if (
+      thumbnails.value[item.path]
+      || thumbnailFailed.value[item.path]
+      || thumbnailLoading.has(item.path)
+      || isThumbnailQueued(item.path)
+    ) {
+      continue
+    }
+
+    thumbnailQueue.push(item)
+  }
+
+  processThumbnailQueue()
+}
+
+function processThumbnailQueue() {
+  const queueId = thumbnailQueueId
+
+  while (isActive && thumbnailWorkerCount < thumbnailConcurrency && thumbnailQueue.length) {
+    const item = thumbnailQueue.shift()
+    if (!item)
+      return
+
+    thumbnailWorkerCount += 1
+    thumbnailLoading.add(item.path)
+    void loadThumbnail(item, queueId)
+  }
+}
+
+async function loadThumbnail(item: LocalWallpaper, queueId: number) {
+  try {
+    const result = await generateLocalThumbnail(item.path, item.modifiedAt)
+
+    if (isActive && queueId === thumbnailQueueId)
+      thumbnails.value[item.path] = convertFileSrc(result.path)
+  }
+  catch {
+    if (isActive && queueId === thumbnailQueueId)
+      thumbnailFailed.value[item.path] = true
+  }
+  finally {
+    thumbnailLoading.delete(item.path)
+    thumbnailWorkerCount -= 1
+
+    if (queueId === thumbnailQueueId)
+      processThumbnailQueue()
+  }
+}
+
+function leaveLocalPage() {
+  isActive = false
+  hasBeenDeactivated = true
+  loadId += 1
+  resetThumbnailQueue()
+  loading.value = false
+  stopRenderQueue()
+}
 
 async function ensureCurrentDirectory() {
   const result = await ensureDownloadDir(directory.value || undefined)
   directory.value = result.path
-  if (!settings.downloadDir)
+  if (settings.downloadDir !== result.path)
     settings.setDownloadDir(result.path)
 }
 
@@ -42,20 +173,35 @@ async function loadDefaultDirectory() {
 }
 
 async function loadWallpapers() {
+  const currentLoadId = ++loadId
   loading.value = true
 
   try {
     await ensureCurrentDirectory()
     const result = await scanLocalWallpapers(directory.value, page.value, pageSize)
+    if (currentLoadId !== loadId || !isActive)
+      return
+
     wallpapers.value = result.data
     lastPage.value = result.lastPage
     total.value = result.total
+    resetThumbnailQueue()
+    startRenderQueue()
+    enqueueDisplayedThumbnails()
+    localWallpaperCache = {
+      directory: directory.value,
+      wallpapers: result.data,
+      page: page.value,
+      lastPage: result.lastPage,
+      total: result.total,
+    }
   }
   catch (err) {
     message.error(err instanceof Error ? err.message : '读取本地壁纸失败')
   }
   finally {
-    loading.value = false
+    if (currentLoadId === loadId && isActive)
+      loading.value = false
   }
 }
 
@@ -69,7 +215,7 @@ function refreshWallpapers() {
 async function openDirectory() {
   try {
     await ensureCurrentDirectory()
-    await openPath(directory.value)
+    await openInFileManager(directory.value)
   }
   catch (err) {
     message.error(err instanceof Error ? err.message : '打开目录失败')
@@ -78,7 +224,7 @@ async function openDirectory() {
 
 async function showInFolder(item: LocalWallpaper) {
   try {
-    await revealItemInDir(item.path)
+    await openInFileManager(item.path)
   }
   catch (err) {
     message.error(err instanceof Error ? err.message : '显示文件位置失败')
@@ -126,8 +272,12 @@ function openPreview(item: LocalWallpaper) {
   showPreview.value = true
 }
 
-function imageSrc(item: LocalWallpaper) {
+function originalImageSrc(item: LocalWallpaper) {
   return convertFileSrc(item.path)
+}
+
+function thumbnailSrc(item: LocalWallpaper) {
+  return thumbnails.value[item.path]
 }
 
 function formatFileSize(size: number) {
@@ -154,9 +304,7 @@ function imageSize(item: LocalWallpaper) {
   return `${item.width}x${item.height}`
 }
 
-watch(page, loadWallpapers)
-
-onMounted(async () => {
+async function loadInitialWallpapers() {
   try {
     await loadDefaultDirectory()
     await loadWallpapers()
@@ -164,6 +312,41 @@ onMounted(async () => {
   catch (err) {
     message.error(err instanceof Error ? err.message : '初始化本地壁纸失败')
   }
+}
+
+watch(page, () => {
+  void loadWallpapers()
+})
+
+watch(displayedWallpapers, () => {
+  enqueueDisplayedThumbnails()
+}, { flush: 'post' })
+
+onMounted(() => {
+  startRenderQueue()
+  enqueueDisplayedThumbnails()
+
+  afterPagePaint(() => {
+    void loadInitialWallpapers()
+  })
+})
+
+onActivated(() => {
+  isActive = true
+
+  if (hasBeenDeactivated) {
+    afterPagePaint(() => {
+      void loadWallpapers()
+    })
+  }
+})
+
+onDeactivated(() => {
+  leaveLocalPage()
+})
+
+onBeforeUnmount(() => {
+  leaveLocalPage()
 })
 </script>
 
@@ -188,18 +371,26 @@ onMounted(async () => {
       </n-card>
 
       <n-spin :show="loading">
-        <n-empty v-if="!wallpapers.length" description="没有本地壁纸" />
+        <n-empty v-if="!loading && !wallpapers.length" description="没有本地壁纸" />
 
         <div v-else class="wallpaper-grid">
           <n-card
-            v-for="item in wallpapers"
+            v-for="item in displayedWallpapers"
             :key="item.path"
             class="wallpaper-card"
             content-style="padding: 0;"
             size="small"
           >
             <button class="thumb-button" type="button" @click="openPreview(item)">
-              <img :alt="item.filename" class="thumb" loading="lazy" :src="imageSrc(item)">
+              <img
+                v-if="thumbnailSrc(item)"
+                :alt="item.filename"
+                class="thumb"
+                decoding="async"
+                loading="lazy"
+                :src="thumbnailSrc(item)"
+              >
+              <div v-else class="thumb-placeholder" />
             </button>
 
             <div class="card-body">
@@ -243,37 +434,32 @@ onMounted(async () => {
     </n-space>
 
     <n-modal v-model:show="showPreview" preset="card" class="preview-modal" title="本地预览">
-      <div v-if="selectedWallpaper" class="preview-content">
-        <n-image
-          class="preview-image"
-          object-fit="contain"
-          :preview-disabled="true"
-          :src="imageSrc(selectedWallpaper)"
-        />
+      <PreviewInfoOverlay
+        v-if="selectedWallpaper"
+        :alt="selectedWallpaper.filename"
+        :src="originalImageSrc(selectedWallpaper)"
+      >
+        <template #info>
+          <div class="preview-meta">
+            <span class="preview-meta-item">
+              <span class="preview-meta-label">文件名</span>
+              <span class="preview-meta-value long">{{ selectedWallpaper.filename }}</span>
+            </span>
+            <span class="preview-meta-item">
+              <span class="preview-meta-label">尺寸</span>
+              <span class="preview-meta-value">{{ imageSize(selectedWallpaper) }}</span>
+            </span>
+            <span class="preview-meta-item">
+              <span class="preview-meta-label">大小</span>
+              <span class="preview-meta-value">{{ formatFileSize(selectedWallpaper.fileSize) }}</span>
+            </span>
+            <span class="preview-meta-item">
+              <span class="preview-meta-label">创建</span>
+              <span class="preview-meta-value">{{ formatDate(selectedWallpaper.createdAt) }}</span>
+            </span>
+          </div>
 
-        <div class="preview-info">
-          <n-descriptions bordered label-placement="left" :column="1" size="small">
-            <n-descriptions-item label="文件名">
-              {{ selectedWallpaper.filename }}
-            </n-descriptions-item>
-            <n-descriptions-item label="尺寸">
-              {{ imageSize(selectedWallpaper) }}
-            </n-descriptions-item>
-            <n-descriptions-item label="大小">
-              {{ formatFileSize(selectedWallpaper.fileSize) }}
-            </n-descriptions-item>
-            <n-descriptions-item label="创建时间">
-              {{ formatDate(selectedWallpaper.createdAt) }}
-            </n-descriptions-item>
-            <n-descriptions-item label="修改时间">
-              {{ formatDate(selectedWallpaper.modifiedAt) }}
-            </n-descriptions-item>
-            <n-descriptions-item label="路径">
-              {{ selectedWallpaper.path }}
-            </n-descriptions-item>
-          </n-descriptions>
-
-          <n-space>
+          <n-space class="preview-actions">
             <n-button type="primary" @click="applyWallpaper(selectedWallpaper)">
               设为壁纸
             </n-button>
@@ -284,8 +470,8 @@ onMounted(async () => {
               删除
             </n-button>
           </n-space>
-        </div>
-      </div>
+        </template>
+      </PreviewInfoOverlay>
     </n-modal>
   </div>
 </template>
@@ -308,6 +494,8 @@ onMounted(async () => {
 }
 
 .wallpaper-card {
+  contain-intrinsic-size: 320px;
+  content-visibility: auto;
   overflow: hidden;
 }
 
@@ -325,6 +513,12 @@ onMounted(async () => {
   display: block;
   height: 100%;
   object-fit: cover;
+  width: 100%;
+}
+
+.thumb-placeholder {
+  background: var(--n-color-embedded);
+  height: 100%;
   width: 100%;
 }
 
@@ -364,32 +558,10 @@ onMounted(async () => {
   width: 88vw;
 }
 
-.preview-content {
-  display: grid;
-  gap: 16px;
-  grid-template-columns: minmax(0, 1fr) 340px;
-}
-
-.preview-image {
-  max-height: 72vh;
-  width: 100%;
-}
-
-.preview-info {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  min-width: 0;
-}
-
 @media (max-width: 900px) {
   .local-page {
     min-width: 0;
     padding: 12px 12px 24px;
-  }
-
-  .preview-content {
-    grid-template-columns: 1fr;
   }
 }
 </style>
