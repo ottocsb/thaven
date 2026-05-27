@@ -6,14 +6,17 @@ enum url {
   greet = 'greet',
   getDefaultDownloadDir = 'get_default_download_dir',
   ensureDownloadDir = 'ensure_download_dir',
+  generateLocalThumbnail = 'generate_local_thumbnail',
   downloadWallpaper = 'download_wallpaper',
   scanLocalWallpapers = 'scan_local_wallpapers',
   deleteLocalWallpaper = 'delete_local_wallpaper',
+  openInFileManager = 'open_in_file_manager',
   setWallpaper = 'set_wallpaper',
 }
 
 export interface PathResult {
   path: string
+  alreadyExists?: boolean
 }
 
 export interface LocalWallpaper {
@@ -50,6 +53,10 @@ export function ensureDownloadDir(directory?: string) {
   return invoke<PathResult>(url.ensureDownloadDir, { directory })
 }
 
+export function generateLocalThumbnail(path: string, modifiedAt: number | null) {
+  return invoke<PathResult>(url.generateLocalThumbnail, { path, modifiedAt })
+}
+
 export function scanLocalWallpapers(
   directory: string,
   page = 1,
@@ -64,6 +71,10 @@ export function deleteLocalWallpaper(path: string) {
   return invoke<void>(url.deleteLocalWallpaper, { path })
 }
 
+export function openInFileManager(path: string) {
+  return invoke<void>(url.openInFileManager, { path })
+}
+
 export function setWallpaper(path: string) {
   return invoke<void>(url.setWallpaper, { path })
 }
@@ -71,13 +82,13 @@ export function setWallpaper(path: string) {
 export function downloadWallpaper() {
   const { data, loading, error, runAsync }
         = useRequest(
-          (downloadUrl: string, filename: string, directory?: string) =>
-            invoke<PathResult>(url.downloadWallpaper, { url: downloadUrl, filename, directory }),
+          (downloadUrl: string, filename: string, directory: string | undefined, taskId: string) =>
+            invoke<PathResult>(url.downloadWallpaper, { url: downloadUrl, filename, directory, taskId }),
           { manual: true },
         )
   return { data, loading, error, runAsync }
 }
 
-export function downloadWallpaperFile(downloadUrl: string, filename: string, directory?: string) {
-  return invoke<PathResult>(url.downloadWallpaper, { url: downloadUrl, filename, directory })
+export function downloadWallpaperFile(downloadUrl: string, filename: string, directory: string | undefined, taskId: string) {
+  return invoke<PathResult>(url.downloadWallpaper, { url: downloadUrl, filename, directory, taskId })
 }
