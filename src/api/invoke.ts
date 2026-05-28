@@ -3,7 +3,6 @@ import { invoke } from '@tauri-apps/api/core'
 
 // Interact with the backend.
 enum url {
-  greet = 'greet',
   getDefaultDownloadDir = 'get_default_download_dir',
   ensureDownloadDir = 'ensure_download_dir',
   generateLocalThumbnail = 'generate_local_thumbnail',
@@ -34,15 +33,6 @@ export interface LocalWallpaperPage {
   currentPage: number
   lastPage: number
   total: number
-}
-
-export function greet() {
-  const { data, loading, error, run }
-        = useRequest(
-          (name: string) => invoke(url.greet, { name }),
-          { manual: true },
-        )
-  return { data, loading, error, run }
 }
 
 export function getDefaultDownloadDir() {
