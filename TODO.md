@@ -145,57 +145,49 @@
   - [x] API 文档链接
   - [x] 许可证说明
 
-## P3：收藏/集合
-
-- [ ] 在线集合浏览
-  - [ ] 当前用户 collections
-  - [ ] 指定用户 public collections
-  - [ ] collection 内壁纸列表
-  - [ ] 支持 collection 内 purity 过滤
-- [ ] 注意：官方 API 文档只说明 collections 读取能力，未提供明确的收藏写入接口，先不要做在线收藏写入。
 
 ## P3：界面和体验
-- [ ] 清理模板残留
-  - [ ] `src/components/HelloWorld.vue`
-  - [ ] `src/components/counter.vue`
-  - [ ] `src/assets/vue.svg`
-- [ ] 菜单和路由体验
-  - [ ] 当前菜单高亮
-  - [ ] 页面标题
-  - [ ] 404 页面
-- [ ] 图片加载体验
-  - [ ] 懒加载
-  - [ ] 占位状态
-  - [ ] 加载失败占位
-- [ ] 窗口体验
-  - [ ] 最小化到托盘
-  - [ ] 最大化/还原
-  - [ ] 关闭行为确认或隐藏到托盘
+- [x] 清理模板残留
+  - [x] `src/components/HelloWorld.vue`
+  - [x] `src/components/counter.vue`
+  - [x] `src/assets/vue.svg`
+- [x] 菜单和路由体验
+  - [x] 当前菜单高亮
+  - [x] 页面标题
+  - [x] 404 页面
+- [x] 图片加载体验
+  - [x] 懒加载
+  - [x] 占位状态
+  - [x] 加载失败占位
+- [x] 窗口体验
+  - [x] 最小化到托盘
+  - [x] 最大化/还原
+  - [x] 关闭行为确认或隐藏到托盘
 
 ## P3：测试与构建
 
-- [ ] 最小单元测试
-  - [ ] API 参数序列化
-  - [ ] API 响应类型解析
-  - [ ] 文件大小格式化
-  - [ ] 下载状态流转
-- [ ] Tauri 命令测试
-  - [ ] 本地目录扫描
-  - [ ] 下载目录创建
-  - [ ] 删除文件
-  - [ ] 设置壁纸命令返回值
-- [ ] 构建检查
-  - [ ] `pnpm build`
-  - [ ] `cargo tauri build`
-  - [ ] 图标
-  - [ ] 应用名
-  - [ ] 版本号
-  - [ ] Windows 安装包
-- [ ] README 更新
-  - [ ] 开发命令
-  - [ ] 构建命令
-  - [ ] API Key 获取方式
-  - [ ] 已知限制
+- [x] 最小单元测试
+  - [x] API 参数序列化
+  - [x] API 响应类型解析
+  - [x] 文件大小格式化
+  - [x] 下载状态流转
+- [x] Tauri 命令测试
+  - [x] 本地目录扫描
+  - [x] 下载目录创建
+  - [x] 删除文件
+  - [x] 设置壁纸命令返回值
+- [x] 构建检查
+  - [x] `pnpm build`
+  - [x] `cargo tauri build`（本机未安装 `cargo-tauri`，已用项目本地 `pnpm exec tauri build` 验证）
+  - [x] 图标
+  - [x] 应用名
+  - [x] 版本号
+  - [x] Windows 安装包
+- [x] README 更新
+  - [x] 开发命令
+  - [x] 构建命令
+  - [x] API Key 获取方式
+  - [x] 已知限制
 
 ## 建议执行顺序
 
