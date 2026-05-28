@@ -7,6 +7,7 @@ import { setWallpaper as setSystemWallpaper } from '~/api/invoke'
 import PreviewInfoOverlay from '~/components/PreviewInfoOverlay.vue'
 import useDownloadTasks from '~/stores/useDownloadTasks'
 import useAppSettings from '~/stores/useAppSettings'
+import { formatFileSize } from '~/utils/format'
 import type { SearchParams, SearchResponse, Wallpaper } from '~/plugins/type'
 
 type Sorting = NonNullable<SearchParams['sorting']>
@@ -48,6 +49,7 @@ const settingWallpaperIds = ref<string[]>([])
 const resolutionPreset = ref('')
 const ratioPreset = ref('')
 const colorPreset = ref('')
+const thumbFailed = ref<Record<string, boolean>>({})
 
 let observer: IntersectionObserver | null = null
 
@@ -288,14 +290,8 @@ function openPreview(wallpaper: Wallpaper) {
   showPreview.value = true
 }
 
-function formatFileSize(size: number) {
-  if (size < 1024)
-    return `${size} B`
-
-  if (size < 1024 * 1024)
-    return `${(size / 1024).toFixed(1)} KB`
-
-  return `${(size / 1024 / 1024).toFixed(1)} MB`
+function markThumbFailed(id: string) {
+  thumbFailed.value[id] = true
 }
 
 function getFileExt(wallpaper: Wallpaper) {
@@ -603,7 +599,18 @@ onBeforeUnmount(() => {
             size="small"
           >
             <button class="thumb-button" type="button" @click="openPreview(wallpaper)">
-              <img :alt="wallpaper.resolution" class="thumb" loading="lazy" :src="wallpaper.thumbs.small">
+              <img
+                v-if="!thumbFailed[wallpaper.id]"
+                :alt="wallpaper.resolution"
+                class="thumb"
+                decoding="async"
+                loading="lazy"
+                :src="wallpaper.thumbs.small"
+                @error="markThumbFailed(wallpaper.id)"
+              >
+              <div v-else class="thumb-placeholder is-failed">
+                加载失败
+              </div>
             </button>
 
             <div class="card-body">
@@ -824,10 +831,11 @@ onBeforeUnmount(() => {
 
 .thumb-button {
   aspect-ratio: 3 / 2;
-  background: transparent;
+  background: var(--n-color-embedded);
   border: 0;
   cursor: pointer;
   display: block;
+  overflow: hidden;
   padding: 0;
   width: 100%;
 }
@@ -837,6 +845,26 @@ onBeforeUnmount(() => {
   height: 100%;
   object-fit: cover;
   width: 100%;
+}
+
+.thumb-placeholder {
+  align-items: center;
+  color: var(--n-text-color-3);
+  display: flex;
+  font-size: 12px;
+  height: 100%;
+  justify-content: center;
+  width: 100%;
+}
+
+.thumb-placeholder.is-failed {
+  background: repeating-linear-gradient(
+    45deg,
+    rgb(208 48 80 / 8%),
+    rgb(208 48 80 / 8%) 8px,
+    transparent 8px,
+    transparent 16px
+  );
 }
 
 .card-body {

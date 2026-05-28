@@ -1,31 +1,29 @@
-<script lang="ts" setup>
-const typedRef = useTyped([' is not found!'])
-void typedRef
-</script>
-
 <template>
-  <div class="h-screen flex flex-wrap items-center justify-around text-center">
-    <div flex-1 font-bold w-300px>
-      <div class="mb20px text-7xl">
-        404
-      </div>
-      <div ref="typedRef" class="h40px mb-5 text-3xl">
-        The Page
-      </div>
-      <RouterLink to="/">
-        <button
-          class="rounded bg-light-800 px-5 py-2 text-lg transition"
-          dark="text-black"
-          hover="shadow-md"
-        >
-          Go Home
-        </button>
-      </RouterLink>
-    </div>
+  <div class="not-found-page">
+    <n-result
+      status="404"
+      title="页面不存在"
+      description="当前地址没有对应的页面。"
+    >
+      <template #footer>
+        <RouterLink to="/">
+          <n-button type="primary">
+            回到首页
+          </n-button>
+        </RouterLink>
+      </template>
+    </n-result>
   </div>
 </template>
 
-<style>
+<style scoped>
+.not-found-page {
+  align-items: center;
+  display: flex;
+  min-height: 100vh;
+  justify-content: center;
+  padding: 24px;
+}
 </style>
 
 <route lang="json">

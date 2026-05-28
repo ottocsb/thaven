@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import { NIcon } from 'naive-ui'
 import type { Component } from 'vue'
-import { h } from 'vue'
+import { computed, h } from 'vue'
 import {
   Albums as AlbumsIcon,
   Apps as AppsIcon,
@@ -44,14 +44,21 @@ const menuOptions = [
     icon: renderIcon(FishIcon),
   },
 ]
-function handleUpdateValue(value: any) {
+const activeMenuKey = computed(() => {
+  if (menuOptions.some(item => item.key === route.path))
+    return route.path
+
+  return null
+})
+
+function handleUpdateValue(value: string) {
   router.push({ path: value })
 }
 </script>
 
 <template>
   <n-menu
-    :default-value="route.path"
+    :value="activeMenuKey"
     :options="menuOptions"
     @update:value="handleUpdateValue"
   />

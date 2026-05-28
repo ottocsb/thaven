@@ -1,13 +1,15 @@
 <script lang="ts" setup>
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { useMessage } from 'naive-ui'
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { ensureDownloadDir, openInFileManager } from '~/api/invoke'
 import useDownloadTasks from '~/stores/useDownloadTasks'
+import { formatFileSize } from '~/utils/format'
 import type { DownloadTask, DownloadTaskStatus } from '~/stores/useDownloadTasks'
 
 const downloadTasks = useDownloadTasks()
 const message = useMessage()
+const thumbnailFailed = ref<Record<string, boolean>>({})
 
 function statusText(status: DownloadTaskStatus) {
   if (status === 'downloading')
@@ -47,16 +49,6 @@ function taskProgress(task: DownloadTask) {
   return Math.max(0, Math.min(100, Math.round(progress)))
 }
 
-function formatFileSize(size: number) {
-  if (size < 1024)
-    return `${size} B`
-
-  if (size < 1024 * 1024)
-    return `${(size / 1024).toFixed(1)} KB`
-
-  return `${(size / 1024 / 1024).toFixed(1)} MB`
-}
-
 function progressText(task: DownloadTask) {
   const downloaded = task.downloadedBytes || 0
   const total = task.totalBytes || 0
@@ -82,6 +74,9 @@ function displayPath(task: DownloadTask) {
 }
 
 function thumbnailSrc(task: DownloadTask) {
+  if (thumbnailFailed.value[task.id])
+    return ''
+
   if (task.localPath)
     return convertFileSrc(task.localPath)
 
@@ -89,6 +84,10 @@ function thumbnailSrc(task: DownloadTask) {
     return task.thumbUrl
 
   return ''
+}
+
+function markThumbnailFailed(taskId: string) {
+  thumbnailFailed.value[taskId] = true
 }
 
 function taskDirectory(task: DownloadTask) {
@@ -167,10 +166,12 @@ onMounted(() => {
               <img
                 v-if="thumbnailSrc(task)"
                 :alt="task.filename"
+                decoding="async"
                 loading="lazy"
                 :src="thumbnailSrc(task)"
+                @error="markThumbnailFailed(task.id)"
               >
-              <span v-else>无图</span>
+              <span v-else>{{ thumbnailFailed[task.id] ? '加载失败' : '无图' }}</span>
             </div>
 
             <div class="task-info">
@@ -271,6 +272,11 @@ onMounted(() => {
   font-size: 12px;
   justify-content: center;
   overflow: hidden;
+}
+
+.task-thumb span {
+  padding: 0 8px;
+  text-align: center;
 }
 
 .task-thumb img {

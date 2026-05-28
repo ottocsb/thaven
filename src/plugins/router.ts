@@ -8,6 +8,22 @@ const router = createRouter({
 	routes: setupLayouts([...routes]),
 })
 
+const routeTitles: Record<string, string> = {
+  '/': '在线壁纸',
+  '/localList': '本地壁纸',
+  '/downloadCenter': '下载中心',
+  '/setup': '设置',
+  '/about': '关于',
+}
+
+router.afterEach((to) => {
+  const title = typeof to.meta.title === 'string'
+    ? to.meta.title
+    : routeTitles[to.path]
+
+  document.title = title ? `${title} - thaven` : 'thaven'
+})
+
 if (import.meta.env.DEV) {
   let routeStart = 0
 

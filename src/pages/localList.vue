@@ -28,6 +28,7 @@ import {
   setWallpaper,
 } from '~/api/invoke'
 import useAppSettings from '~/stores/useAppSettings'
+import { formatFileSize } from '~/utils/format'
 
 defineOptions({
   name: 'LocalListPage',
@@ -280,14 +281,8 @@ function thumbnailSrc(item: LocalWallpaper) {
   return thumbnails.value[item.path]
 }
 
-function formatFileSize(size: number) {
-  if (size < 1024)
-    return `${size} B`
-
-  if (size < 1024 * 1024)
-    return `${(size / 1024).toFixed(1)} KB`
-
-  return `${(size / 1024 / 1024).toFixed(1)} MB`
+function thumbnailStatusText(item: LocalWallpaper) {
+  return thumbnailFailed.value[item.path] ? '加载失败' : '加载中'
 }
 
 function formatDate(value: number | null) {
@@ -390,7 +385,13 @@ onBeforeUnmount(() => {
                 loading="lazy"
                 :src="thumbnailSrc(item)"
               >
-              <div v-else class="thumb-placeholder" />
+              <div
+                v-else
+                class="thumb-placeholder"
+                :class="{ 'is-failed': thumbnailFailed[item.path] }"
+              >
+                {{ thumbnailStatusText(item) }}
+              </div>
             </button>
 
             <div class="card-body">
@@ -517,9 +518,24 @@ onBeforeUnmount(() => {
 }
 
 .thumb-placeholder {
+  align-items: center;
   background: var(--n-color-embedded);
+  color: var(--n-text-color-3);
+  display: flex;
+  font-size: 12px;
   height: 100%;
+  justify-content: center;
   width: 100%;
+}
+
+.thumb-placeholder.is-failed {
+  background: repeating-linear-gradient(
+    45deg,
+    rgb(208 48 80 / 8%),
+    rgb(208 48 80 / 8%) 8px,
+    transparent 8px,
+    transparent 16px
+  );
 }
 
 .card-body {
