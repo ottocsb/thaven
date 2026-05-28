@@ -35,6 +35,19 @@ function formatQueryValue(value: QueryValue) {
   return String(value)
 }
 
+export function buildWallhavenUrl(url: string, query?: Record<string, QueryValue>) {
+  const requestUrl = new URL(baseURL + url)
+
+  if (query) {
+    Object.entries(query).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '')
+        requestUrl.searchParams.set(key, formatQueryValue(value))
+    })
+  }
+
+  return requestUrl.toString()
+}
+
 async function waitForRateLimit() {
   const now = Date.now()
   const oneMinute = 60 * 1000
@@ -66,16 +79,10 @@ function getErrorMessage(status: number) {
 export function http<T = unknown>(url: string, opts: opt = {}) {
   return new Promise((resolve, reject) => {
     const { method, query, headers, callback } = opts
-    const requestUrl = new URL(baseURL + url)
-    if (query) {
-      Object.entries(query).forEach(([key, value]) => {
-        if (value !== undefined && value !== null && value !== '')
-          requestUrl.searchParams.set(key, formatQueryValue(value))
-      })
-    }
+    const requestUrl = buildWallhavenUrl(url, query)
 
     waitForRateLimit()
-      .then(() => fetch(requestUrl.toString(), {
+      .then(() => fetch(requestUrl, {
         method: method || 'GET',
         headers: {
           'content-type': 'application/json',

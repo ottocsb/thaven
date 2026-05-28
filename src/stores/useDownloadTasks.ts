@@ -52,7 +52,7 @@ function errorMessage(err: unknown) {
   return err instanceof Error ? err.message : '下载失败'
 }
 
-function failInterruptedTasks(tasks: DownloadTask[]) {
+export function failInterruptedDownloadTasks(tasks: DownloadTask[]) {
   const now = Date.now()
   let changed = false
 
@@ -210,7 +210,7 @@ export default defineStore('download-tasks', {
   },
   persist: {
     afterHydrate: ({ store }) => {
-      if (failInterruptedTasks(store.tasks))
+      if (failInterruptedDownloadTasks(store.tasks))
         store.$persist()
     },
   },
