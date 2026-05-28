@@ -11,12 +11,7 @@ use std::{
 
 use image::{codecs::jpeg::JpegEncoder, ImageReader};
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager};
-
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
+use tauri::{AppHandle, Emitter, Manager, WindowEvent};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -559,8 +554,17 @@ pub fn run() {
             tray::init(app)?;
             Ok(())
         })
+        .on_window_event(|window, event| match event {
+            WindowEvent::CloseRequested { api, .. } => {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+            WindowEvent::Resized(_) if window.is_minimized().unwrap_or(false) => {
+                let _ = window.hide();
+            }
+            _ => {}
+        })
         .invoke_handler(tauri::generate_handler![
-            greet,
             get_default_download_dir,
             ensure_download_dir,
             generate_local_thumbnail,
@@ -625,6 +629,47 @@ mod tests {
         fs::write(&path, b"test").unwrap();
         super::delete_local_wallpaper(path.to_string_lossy().into_owned()).unwrap();
         assert!(!path.exists());
+    }
+
+    #[test]
+    fn scans_local_wallpapers_only_for_supported_images() {
+        let dir = tempfile::tempdir().unwrap();
+        let image_path = dir.path().join("wallpaper.png");
+        let text_path = dir.path().join("note.txt");
+        let image = image::RgbImage::from_pixel(4, 3, image::Rgb([10, 20, 30]));
+
+        image.save(&image_path).unwrap();
+        fs::write(text_path, b"skip").unwrap();
+
+        let page = super::scan_local_wallpapers_blocking(
+            dir.path().to_string_lossy().into_owned(),
+            Some(1),
+            Some(10),
+            Some("modified".to_string()),
+            Some("desc".to_string()),
+        )
+        .unwrap();
+
+        assert_eq!(page.total, 1);
+        assert_eq!(page.current_page, 1);
+        assert_eq!(page.last_page, 1);
+        assert_eq!(page.data[0].filename, "wallpaper.png");
+        assert_eq!(page.data[0].width, Some(4));
+        assert_eq!(page.data[0].height, Some(3));
+    }
+
+    #[test]
+    fn set_wallpaper_returns_error_for_missing_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let err = super::set_wallpaper(
+            dir.path()
+                .join("missing.jpg")
+                .to_string_lossy()
+                .into_owned(),
+        )
+        .unwrap_err();
+
+        assert_eq!(err, "壁纸文件不存在");
     }
 
     #[test]
