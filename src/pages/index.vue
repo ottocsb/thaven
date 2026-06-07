@@ -1,10 +1,9 @@
 <script lang="ts" setup>
-import { Refresh, Search as SearchIcon } from '@vicons/ionicons5'
+import { CloudDownload, Eye, Image as WallpaperIcon, Refresh, Search as SearchIcon } from '@vicons/ionicons5'
 import { useMessage } from 'naive-ui'
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { search } from '~/api/api'
 import { setWallpaper as setSystemWallpaper } from '~/api/invoke'
-import PreviewInfoOverlay from '~/components/PreviewInfoOverlay.vue'
 import useDownloadTasks from '~/stores/useDownloadTasks'
 import useAppSettings from '~/stores/useAppSettings'
 import { formatFileSize } from '~/utils/format'
@@ -50,8 +49,10 @@ const resolutionPreset = ref('')
 const ratioPreset = ref('')
 const colorPreset = ref('')
 const thumbFailed = ref<Record<string, boolean>>({})
+const filterStuck = ref(false)
 
 let observer: IntersectionObserver | null = null
+const LOAD_MORE_OFFSET = 360
 
 const categoryOptions = [
   { label: '综合', value: 'general' },
@@ -72,50 +73,36 @@ const sortingOptions = [
   { label: '浏览', value: 'views' },
   { label: '收藏', value: 'favorites' },
   { label: '排行', value: 'toplist' },
-]
+] as Array<{ label: string, value: Sorting }>
 
 const orderOptions = [
   { label: '降序', value: 'desc' },
   { label: '升序', value: 'asc' },
-]
+] as Array<{ label: string, value: Order }>
 
 const topRangeOptions = [
-  { label: '1 天', value: '1d' },
-  { label: '3 天', value: '3d' },
-  { label: '1 周', value: '1w' },
-  { label: '1 月', value: '1M' },
-  { label: '3 月', value: '3M' },
-  { label: '6 月', value: '6M' },
-  { label: '1 年', value: '1y' },
-]
+  { label: '最近 1 天', value: '1d' },
+  { label: '最近 3 天', value: '3d' },
+  { label: '最近 1 周', value: '1w' },
+  { label: '最近 1 月', value: '1M' },
+  { label: '最近 3 月', value: '3M' },
+  { label: '最近 6 月', value: '6M' },
+  { label: '最近 1 年', value: '1y' },
+] as Array<{ label: string, value: TopRange }>
 
 const resolutionOptions = [
   { label: '分辨率', value: '' },
-  {
-    type: 'group',
-    label: '至少',
-    key: 'atleast',
-    children: [
-      { label: '至少 1280x720', value: 'atleast:1280x720' },
-      { label: '至少 1600x900', value: 'atleast:1600x900' },
-      { label: '至少 1920x1080', value: 'atleast:1920x1080' },
-      { label: '至少 2560x1440', value: 'atleast:2560x1440' },
-      { label: '至少 3840x2160', value: 'atleast:3840x2160' },
-    ],
-  },
-  {
-    type: 'group',
-    label: '精确',
-    key: 'exactly',
-    children: [
-      { label: '1280x720', value: 'exact:1280x720' },
-      { label: '1600x900', value: 'exact:1600x900' },
-      { label: '1920x1080', value: 'exact:1920x1080' },
-      { label: '2560x1440', value: 'exact:2560x1440' },
-      { label: '3840x2160', value: 'exact:3840x2160' },
-      { label: '3440x1440', value: 'exact:3440x1440' },
-    ],
-  },
+  { label: '至少 1280x720', value: 'atleast:1280x720' },
+  { label: '至少 1600x900', value: 'atleast:1600x900' },
+  { label: '至少 1920x1080', value: 'atleast:1920x1080' },
+  { label: '至少 2560x1440', value: 'atleast:2560x1440' },
+  { label: '至少 3840x2160', value: 'atleast:3840x2160' },
+  { label: '精确 1280x720', value: 'exact:1280x720' },
+  { label: '精确 1600x900', value: 'exact:1600x900' },
+  { label: '精确 1920x1080', value: 'exact:1920x1080' },
+  { label: '精确 2560x1440', value: 'exact:2560x1440' },
+  { label: '精确 3840x2160', value: 'exact:3840x2160' },
+  { label: '精确 3440x1440', value: 'exact:3440x1440' },
 ]
 
 const ratioOptions = [
@@ -147,8 +134,6 @@ const colorOptions = [
 const hasMore = computed(() => currentPage.value > 0 && currentPage.value < lastPage.value)
 const isLoading = computed(() => loadingFirstPage.value || loadingMore.value)
 const canShowEmpty = computed(() => !loadingFirstPage.value && !lastError.value && wallpapers.value.length === 0)
-const categorySummary = computed(() => summarizeOptions(form.categories, categoryOptions, '分类'))
-const puritySummary = computed(() => summarizeOptions(form.purity, purityOptions.value, '纯度'))
 
 watch(
   () => settings.apikey,
@@ -201,16 +186,6 @@ function normalizeCsv(value: string) {
     .join(',')
 }
 
-function summarizeOptions(values: string[], options: Array<{ label: string, value: string }>, label: string) {
-  if (values.length === options.length)
-    return `${label}：全部`
-
-  if (values.length === 0)
-    return `${label}：未选`
-
-  return `${label}：${options.filter(item => values.includes(item.value)).map(item => item.label).join('/')}`
-}
-
 function buildQuery(page: number): SearchParams {
   const query: SearchParams = {
     q: form.q.trim(),
@@ -247,6 +222,7 @@ async function loadPage(page: number, append = false) {
   lastError.value = ''
   loadingFirstPage.value = !append
   loadingMore.value = append
+  let loaded = false
 
   try {
     const result = await runSearch(buildQuery(page)) as SearchResponse
@@ -259,15 +235,21 @@ async function loadPage(page: number, append = false) {
 
     if (form.sorting === 'random' && result.meta.seed)
       randomSeed.value = result.meta.seed
+
+    loaded = true
   }
   catch (err) {
-    const fallback = '网络超时或请求失败，稍后重试'
+    const fallback = '网络超时或请求失败，请稍后重试'
     lastError.value = err instanceof Error ? err.message : fallback
     message.error(lastError.value || fallback)
   }
   finally {
     loadingFirstPage.value = false
     loadingMore.value = false
+    if (loaded) {
+      await nextTick()
+      checkLoadMore()
+    }
   }
 }
 
@@ -283,6 +265,24 @@ function submitSearch() {
 function loadMore() {
   if (hasMore.value)
     loadPage(currentPage.value + 1, true)
+}
+
+function isNearPageBottom() {
+  const scrollTop = window.scrollY || document.documentElement.scrollTop || 0
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight
+  const scrollHeight = document.documentElement.scrollHeight || document.body.scrollHeight
+
+  return scrollTop + viewportHeight + LOAD_MORE_OFFSET >= scrollHeight
+}
+
+function checkLoadMore() {
+  if (isNearPageBottom())
+    loadMore()
+}
+
+function handlePageScroll() {
+  filterStuck.value = window.scrollY > 0
+  checkLoadMore()
 }
 
 function openPreview(wallpaper: Wallpaper) {
@@ -384,17 +384,12 @@ async function setWallpaper(wallpaper: Wallpaper) {
   }
 }
 
-function tagType(value: string) {
-  if (value === 'sfw')
-    return 'success'
-
-  if (value === 'sketchy')
-    return 'warning'
-
-  if (value === 'nsfw')
-    return 'error'
-
-  return 'default'
+function chipClass(value: string) {
+  return {
+    success: value === 'sfw',
+    warning: value === 'sketchy',
+    danger: value === 'nsfw',
+  }
 }
 
 onMounted(() => {
@@ -406,441 +401,460 @@ onMounted(() => {
   if (sentinelRef.value)
     observer.observe(sentinelRef.value)
 
+  window.addEventListener('scroll', handlePageScroll, { passive: true })
+  handlePageScroll()
   submitSearch()
 })
 
 onBeforeUnmount(() => {
   observer?.disconnect()
+  window.removeEventListener('scroll', handlePageScroll)
 })
 </script>
 
 <template>
-  <div class="online-page">
-    <n-space vertical size="large">
-      <n-card class="search-card" size="small" :bordered="false" content-style="padding: 0;">
-        <div class="searchbar">
-          <n-input
-            v-model:value="form.q"
-            class="search-keyword"
-            clearable
+  <div class="app-page online-page">
+    <section class="app-panel online-filter" :class="{ stuck: filterStuck }">
+      <div class="primary-search">
+        <div class="search-input-wrap">
+          <SearchIcon class="search-input-icon" />
+          <input
+            v-model="form.q"
+            class="app-input search-keyword"
             placeholder="搜索关键词（英文）"
-            size="small"
+            type="search"
             @keyup.enter="submitSearch"
           >
-            <template #prefix>
-              <n-icon>
-                <SearchIcon />
-              </n-icon>
-            </template>
-          </n-input>
-
-          <n-popover trigger="click" placement="bottom-start">
-            <template #trigger>
-              <n-button class="search-filter-trigger" size="small">
-                {{ categorySummary }}
-              </n-button>
-            </template>
-
-            <div class="search-filter-panel">
-              <div class="search-filter-title">
-                分类
-              </div>
-              <n-checkbox-group v-model:value="form.categories" size="small">
-                <n-space vertical size="small">
-                  <n-checkbox
-                    v-for="item in categoryOptions"
-                    :key="item.value"
-                    :label="item.label"
-                    :value="item.value"
-                  />
-                </n-space>
-              </n-checkbox-group>
-            </div>
-          </n-popover>
-
-          <n-popover trigger="click" placement="bottom-start">
-            <template #trigger>
-              <n-button class="search-filter-trigger" size="small">
-                {{ puritySummary }}
-              </n-button>
-            </template>
-
-            <div class="search-filter-panel">
-              <div class="search-filter-title">
-                纯度
-              </div>
-              <n-checkbox-group v-model:value="form.purity" size="small">
-                <n-space vertical size="small">
-                  <n-checkbox
-                    v-for="item in purityOptions"
-                    :key="item.value"
-                    :disabled="item.disabled"
-                    :label="item.label"
-                    :value="item.value"
-                  />
-                </n-space>
-              </n-checkbox-group>
-            </div>
-          </n-popover>
-
-          <n-select
-            v-model:value="resolutionPreset"
-            class="search-resolution"
-            :consistent-menu-width="false"
-            :options="resolutionOptions"
-            size="small"
-          />
-
-          <n-select
-            v-model:value="ratioPreset"
-            class="search-ratio"
-            :consistent-menu-width="false"
-            :options="ratioOptions"
-            size="small"
-          />
-
-          <n-select
-            v-model:value="colorPreset"
-            class="search-color"
-            :consistent-menu-width="false"
-            :options="colorOptions"
-            size="small"
-          />
-
-          <n-select
-            v-model:value="form.sorting"
-            class="search-sort"
-            :consistent-menu-width="false"
-            :options="sortingOptions"
-            size="small"
-          />
-
-          <n-radio-group v-model:value="form.order" class="search-order" size="small">
-            <n-radio-button
-              v-for="item in orderOptions"
-              :key="item.value"
-              :label="item.label"
-              :value="item.value"
-            />
-          </n-radio-group>
-
-          <n-select
-            v-if="form.sorting === 'toplist'"
-            v-model:value="form.topRange"
-            class="search-top-range"
-            :consistent-menu-width="false"
-            :options="topRangeOptions"
-            size="small"
-          />
-
-          <n-input
-            v-if="form.sorting === 'random'"
-            v-model:value="form.seed"
-            class="search-seed"
-            clearable
-            placeholder="Seed"
-            size="small"
-          />
-
-          <n-tooltip>
-            <template #trigger>
-              <n-button
-                class="search-submit"
-                circle
-                type="primary"
-                :loading="loadingFirstPage"
-                size="small"
-                @click="submitSearch"
-              >
-                <template #icon>
-                  <n-icon>
-                    <Refresh />
-                  </n-icon>
-                </template>
-              </n-button>
-            </template>
-            搜索
-          </n-tooltip>
         </div>
-      </n-card>
-
-      <n-alert v-if="!settings.apikey" type="info" closable>
-        未设置 API Key，NSFW 会被禁用。
-      </n-alert>
-
-      <div class="toolbar-line">
-        <span>共 {{ total }} 张</span>
-        <span v-if="currentPage">第 {{ currentPage }} / {{ lastPage }} 页</span>
-        <span v-if="randomSeed">Seed：{{ randomSeed }}</span>
+        <button class="app-button primary" :disabled="loadingFirstPage" type="button" @click="submitSearch">
+          <Refresh class="app-icon" />
+          <span>{{ loadingFirstPage ? '加载中' : '搜索' }}</span>
+        </button>
       </div>
 
-      <n-spin :show="loadingFirstPage">
-        <n-result
-          v-if="lastError && wallpapers.length === 0"
-          status="error"
-          title="加载失败"
-          :description="lastError"
-        >
-          <template #footer>
-            <n-button type="primary" @click="submitSearch">
-              重试
-            </n-button>
-          </template>
-        </n-result>
+      <div class="filter-row">
+        <div class="filter-group">
+          <span class="filter-label">CAT</span>
+          <label v-for="item in categoryOptions" :key="item.value" class="check-chip">
+            <input v-model="form.categories" :value="item.value" type="checkbox">
+            <span>{{ item.label }}</span>
+          </label>
+        </div>
 
-        <n-empty v-else-if="canShowEmpty" description="没有找到壁纸" />
+        <div class="filter-group">
+          <span class="filter-label">PURITY</span>
+          <label v-for="item in purityOptions" :key="item.value" class="check-chip" :class="{ disabled: item.disabled }">
+            <input v-model="form.purity" :disabled="item.disabled" :value="item.value" type="checkbox">
+            <span>{{ item.label }}</span>
+          </label>
+        </div>
 
-        <div v-else class="wallpaper-grid">
-          <n-card
-            v-for="wallpaper in wallpapers"
-            :key="wallpaper.id"
-            class="wallpaper-card"
-            content-style="padding: 0;"
-            size="small"
+        <div class="filter-group sort-group">
+          <span class="filter-label">SORT</span>
+          <button
+            v-for="item in sortingOptions"
+            :key="item.value"
+            class="segmented-button"
+            :class="{ active: form.sorting === item.value }"
+            type="button"
+            @click="form.sorting = item.value"
           >
-            <button class="thumb-button" type="button" @click="openPreview(wallpaper)">
-              <img
-                v-if="!thumbFailed[wallpaper.id]"
-                :alt="wallpaper.resolution"
-                class="thumb"
-                decoding="async"
-                loading="lazy"
-                :src="wallpaper.thumbs.small"
-                @error="markThumbFailed(wallpaper.id)"
-              >
-              <div v-else class="thumb-placeholder is-failed">
-                加载失败
+            {{ item.label }}
+          </button>
+        </div>
+      </div>
+
+      <div class="filter-row secondary">
+        <select v-model="resolutionPreset" class="app-select compact-select">
+          <option v-for="item in resolutionOptions" :key="item.value" :value="item.value">
+            {{ item.label }}
+          </option>
+        </select>
+
+        <select v-model="ratioPreset" class="app-select compact-select">
+          <option v-for="item in ratioOptions" :key="item.value" :value="item.value">
+            {{ item.label }}
+          </option>
+        </select>
+
+        <select v-model="colorPreset" class="app-select compact-select">
+          <option v-for="item in colorOptions" :key="item.value" :value="item.value">
+            {{ item.label }}
+          </option>
+        </select>
+
+        <div class="segmented">
+          <button
+            v-for="item in orderOptions"
+            :key="item.value"
+            class="segmented-button"
+            :class="{ active: form.order === item.value }"
+            type="button"
+            @click="form.order = item.value"
+          >
+            {{ item.label }}
+          </button>
+        </div>
+
+        <div v-if="form.sorting === 'toplist'" class="filter-group">
+          <span class="filter-label">DATE</span>
+          <select v-model="form.topRange" class="app-select compact-select">
+            <option v-for="item in topRangeOptions" :key="item.value" :value="item.value">
+              {{ item.label }}
+            </option>
+          </select>
+        </div>
+
+        <input
+          v-if="form.sorting === 'random'"
+          v-model="form.seed"
+          class="app-input seed-input"
+          placeholder="Seed"
+        >
+
+        <div class="result-meta">
+          <span>共 {{ total }} 张</span>
+          <span v-if="currentPage">第 {{ currentPage }} / {{ lastPage }} 页</span>
+          <span v-if="randomSeed">Seed：{{ randomSeed }}</span>
+        </div>
+      </div>
+    </section>
+
+    <div v-if="!settings.apikey" class="api-hint app-panel">
+      未设置 API Key，NSFW 会被禁用。
+    </div>
+
+    <section class="content-area">
+      <div v-if="loadingFirstPage" class="app-empty">
+        <span class="app-loading">加载壁纸中</span>
+      </div>
+
+      <div v-else-if="lastError && wallpapers.length === 0" class="app-empty error-state">
+        <h2>加载失败</h2>
+        <p>{{ lastError }}</p>
+        <button class="app-button primary" type="button" @click="submitSearch">
+          重试
+        </button>
+      </div>
+
+      <div v-else-if="canShowEmpty" class="app-empty">
+        没有找到壁纸
+      </div>
+
+      <div v-else class="wallpaper-grid">
+        <article v-for="wallpaper in wallpapers" :key="wallpaper.id" class="wallpaper-card">
+          <button class="thumb-button" type="button" @click="openPreview(wallpaper)">
+            <img
+              v-if="!thumbFailed[wallpaper.id]"
+              :alt="wallpaper.resolution"
+              class="thumb"
+              decoding="async"
+              loading="lazy"
+              :src="wallpaper.thumbs.small"
+              @error="markThumbFailed(wallpaper.id)"
+            >
+            <div v-else class="thumb-placeholder is-failed">
+              加载失败
+            </div>
+          </button>
+
+          <div class="wallpaper-overlay">
+            <div class="overlay-top">
+              <span class="app-chip">{{ wallpaper.resolution }}</span>
+              <span class="status-dot" :class="wallpaper.purity" />
+            </div>
+            <div class="overlay-bottom">
+              <div class="overlay-meta">
+                <span>{{ formatFileSize(wallpaper.file_size) }}</span>
+                <span>{{ wallpaper.file_type.replace('image/', '').toUpperCase() }}</span>
+                <span>{{ wallpaper.category }}</span>
               </div>
-            </button>
-
-            <div class="card-body">
-              <div class="card-title">
-                <span>{{ wallpaper.resolution }}</span>
-              </div>
-
-              <div class="card-info">
-                <n-space size="small" :wrap="false">
-                  <n-tag size="small" :type="tagType(wallpaper.category)">
-                    {{ wallpaper.category }}
-                  </n-tag>
-                  <n-tag size="small" :type="tagType(wallpaper.purity)">
-                    {{ wallpaper.purity }}
-                  </n-tag>
-                </n-space>
-
-                <div class="card-meta">
-                  <span>{{ formatFileSize(wallpaper.file_size) }}</span>
-                  <span>{{ wallpaper.file_type.replace('image/', '').toUpperCase() }}</span>
-                </div>
-              </div>
-
-              <n-space>
-                <n-button size="small" @click="openPreview(wallpaper)">
-                  预览
-                </n-button>
-                <n-button
-                  size="small"
-                  type="primary"
-                  :loading="isDownloading(wallpaper.id)"
+              <div class="card-actions">
+                <button class="app-icon-button" title="预览" type="button" @click="openPreview(wallpaper)">
+                  <Eye class="app-icon" />
+                </button>
+                <button
+                  class="app-icon-button primary-action"
+                  :disabled="isDownloading(wallpaper.id)"
+                  title="下载"
+                  type="button"
                   @click="download(wallpaper)"
                 >
-                  下载
-                </n-button>
-                <n-button
-                  size="small"
-                  :loading="isSettingWallpaper(wallpaper.id)"
+                  <CloudDownload class="app-icon" />
+                </button>
+                <button
+                  class="app-icon-button"
+                  :disabled="isSettingWallpaper(wallpaper.id)"
+                  title="设为壁纸"
+                  type="button"
                   @click="setWallpaper(wallpaper)"
                 >
-                  设为壁纸
-                </n-button>
-              </n-space>
+                  <WallpaperIcon class="app-icon" />
+                </button>
+              </div>
             </div>
-          </n-card>
-        </div>
-      </n-spin>
+          </div>
+        </article>
+      </div>
 
       <div ref="sentinelRef" class="load-sentinel">
-        <n-spin v-if="loadingMore" size="small" />
+        <span v-if="loadingMore" class="app-loading">加载更多</span>
         <span v-else-if="hasMore">继续向下滚动加载更多</span>
         <span v-else-if="wallpapers.length">已加载全部</span>
       </div>
-    </n-space>
+    </section>
 
-    <n-modal v-model:show="showPreview" preset="card" class="preview-modal" title="壁纸预览">
-      <PreviewInfoOverlay
-        v-if="selectedWallpaper"
-        :alt="selectedWallpaper.resolution"
-        :src="selectedWallpaper.path"
-      >
-        <template #info>
-          <div class="preview-meta">
-            <span class="preview-meta-item">
-              <span class="preview-meta-label">分辨率</span>
-              <span class="preview-meta-value">{{ selectedWallpaper.resolution }}</span>
-            </span>
-            <span class="preview-meta-item">
-              <span class="preview-meta-label">大小</span>
-              <span class="preview-meta-value">{{ formatFileSize(selectedWallpaper.file_size) }}</span>
-            </span>
-            <span class="preview-meta-item">
-              <span class="preview-meta-label">类型</span>
-              <span class="preview-meta-value">{{ selectedWallpaper.file_type }}</span>
-            </span>
-            <span class="preview-meta-item">
-              <span class="preview-meta-label">分类</span>
-              <span class="preview-meta-value">{{ selectedWallpaper.category }}</span>
-            </span>
-            <span class="preview-meta-item">
-              <span class="preview-meta-label">纯度</span>
-              <span class="preview-meta-value">{{ selectedWallpaper.purity }}</span>
+    <div v-if="showPreview && selectedWallpaper" class="app-modal-mask" @click.self="showPreview = false">
+      <div class="preview-shell app-modal">
+        <div class="preview-image-panel">
+          <img :alt="selectedWallpaper.resolution" class="preview-image" :src="selectedWallpaper.path">
+        </div>
+        <aside class="preview-side">
+          <header class="preview-header">
+            <div>
+              <h2>{{ selectedWallpaper.resolution }}</h2>
+              <span class="app-muted app-mono">{{ selectedWallpaper.id }}</span>
+            </div>
+            <button class="app-icon-button" type="button" @click="showPreview = false">
+              x
+            </button>
+          </header>
+
+          <div class="preview-meta-grid">
+            <div>
+              <span>分辨率</span>
+              <strong>{{ selectedWallpaper.resolution }}</strong>
+            </div>
+            <div>
+              <span>大小</span>
+              <strong>{{ formatFileSize(selectedWallpaper.file_size) }}</strong>
+            </div>
+            <div>
+              <span>类型</span>
+              <strong>{{ selectedWallpaper.file_type }}</strong>
+            </div>
+            <div>
+              <span>纯度</span>
+              <strong>{{ selectedWallpaper.purity }}</strong>
+            </div>
+            <div>
+              <span>分类</span>
+              <strong>{{ selectedWallpaper.category }}</strong>
+            </div>
+          </div>
+
+          <div v-if="selectedWallpaper.tags?.length" class="tag-list">
+            <span
+              v-for="tag in selectedWallpaper.tags"
+              :key="tag.id"
+              class="app-chip"
+              :class="chipClass(tag.purity)"
+            >
+              {{ tag.name }}
             </span>
           </div>
 
-          <n-space v-if="selectedWallpaper.tags?.length" class="tag-list" size="small">
-            <n-tag v-for="tag in selectedWallpaper.tags" :key="tag.id" size="small">
-              {{ tag.name }}
-            </n-tag>
-          </n-space>
-
-          <n-space class="preview-actions">
-            <n-button
-              type="primary"
-              :loading="isDownloading(selectedWallpaper.id)"
+          <div class="preview-actions">
+            <button
+              class="app-button primary"
+              :disabled="isDownloading(selectedWallpaper.id)"
+              type="button"
               @click="download(selectedWallpaper)"
             >
               下载当前壁纸
-            </n-button>
-            <n-button
-              :loading="isSettingWallpaper(selectedWallpaper.id)"
+            </button>
+            <button
+              class="app-button"
+              :disabled="isSettingWallpaper(selectedWallpaper.id)"
+              type="button"
               @click="setWallpaper(selectedWallpaper)"
             >
               设置当前壁纸
-            </n-button>
-          </n-space>
-        </template>
-      </PreviewInfoOverlay>
-    </n-modal>
+            </button>
+          </div>
+        </aside>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .online-page {
-  min-width: 720px;
-  padding: 0 24px 32px;
+  display: grid;
+  gap: 18px;
 }
 
-.search-card {
-  border-radius: 4px;
+.online-filter {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  position: sticky;
+  top: var(--app-header-height);
+  transition: border-color 0.16s ease, border-radius 0.16s ease, box-shadow 0.16s ease;
+  z-index: 25;
 }
 
-.searchbar {
-  align-items: center;
+.online-filter.stuck {
+  border-left-color: transparent;
+  border-radius: 0 0 var(--app-radius-lg) var(--app-radius-lg);
+  border-right-color: transparent;
+  border-top-color: transparent;
+  box-shadow: 0 16px 34px rgb(0 0 0 / 22%);
+}
+
+.primary-search {
   display: flex;
-  font-size: 13px;
-  gap: 4px;
-  min-height: 44px;
-  overflow-x: auto;
-  padding: 8px 10px;
-  scrollbar-width: thin;
-  white-space: nowrap;
+  gap: 10px;
+}
+
+.search-input-wrap {
+  flex: 1;
+  position: relative;
+}
+
+.search-input-icon {
+  color: var(--app-text-dim);
+  height: 18px;
+  left: 10px;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
 }
 
 .search-keyword {
-  flex: 0 0 230px;
+  padding-left: 36px;
+  width: 100%;
 }
 
-.search-resolution {
-  flex: 0 0 88px;
-}
-
-.search-ratio,
-.search-color {
-  flex: 0 0 68px;
-}
-
-.search-sort {
-  flex: 0 0 72px;
-}
-
-.search-top-range,
-.search-seed {
-  flex: 0 0 96px;
-}
-
-.search-order {
-  flex: 0 0 auto;
-}
-
-.search-filter-trigger {
-  flex: 0 0 112px;
-  justify-content: flex-start;
-  overflow: hidden;
-}
-
-.search-submit {
-  flex: 0 0 auto;
-}
-
-.searchbar :deep(.n-input),
-.searchbar :deep(.n-base-selection) {
-  border-radius: 2px;
-}
-
-.searchbar :deep(.n-radio-button) {
-  border-radius: 2px;
-}
-
-.search-filter-trigger :deep(.n-button__content) {
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.search-order :deep(.n-radio-button) {
-  min-width: 40px;
-}
-
-.search-filter-panel {
-  min-width: 120px;
-}
-
-.search-filter-title {
-  color: var(--n-text-color-2);
-  font-size: 12px;
-  margin-bottom: 8px;
-}
-
-.toolbar-line {
-  color: var(--n-text-color-3);
+.filter-row {
+  align-items: center;
+  border-top: 1px solid var(--app-border);
   display: flex;
   flex-wrap: wrap;
-  font-size: 13px;
-  gap: 16px;
+  gap: 12px 22px;
+  padding-top: 14px;
+}
+
+.filter-row:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.filter-row.secondary {
+  gap: 10px;
+}
+
+.filter-group,
+.segmented {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sort-group {
+  margin-left: auto;
+}
+
+.filter-label,
+.result-meta {
+  color: var(--app-text-dim);
+  font-family: var(--app-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+}
+
+.check-chip {
+  align-items: center;
+  color: var(--app-text-muted);
+  display: inline-flex;
+  gap: 6px;
+}
+
+.check-chip input {
+  accent-color: var(--app-primary-solid);
+}
+
+.check-chip.disabled {
+  opacity: 0.45;
+}
+
+.segmented {
+  background: var(--app-surface-highest);
+  border-radius: var(--app-radius);
+  padding: 2px;
+}
+
+.segmented-button {
+  background: transparent;
+  border: 0;
+  border-radius: var(--app-radius);
+  color: var(--app-text-muted);
+  min-height: 28px;
+  padding: 5px 10px;
+}
+
+.segmented-button.active {
+  background: var(--app-surface);
+  color: var(--app-primary);
+}
+
+.compact-select {
+  width: 126px;
+}
+
+.seed-input {
+  width: 120px;
+}
+
+.result-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-left: auto;
+}
+
+.api-hint {
+  color: var(--app-primary);
+  padding: 12px 14px;
 }
 
 .wallpaper-grid {
   display: grid;
-  gap: 16px;
+  gap: 18px;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
 }
 
 .wallpaper-card {
+  aspect-ratio: 16 / 10;
+  background: var(--app-surface-low);
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-lg);
+  contain-intrinsic-size: 260px;
+  content-visibility: auto;
   overflow: hidden;
+  position: relative;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.wallpaper-card:hover {
+  border-color: rgb(165 231 255 / 55%);
+  box-shadow: 0 0 16px rgb(0 210 255 / 12%);
+  transform: translateY(-1px);
 }
 
 .thumb-button {
-  aspect-ratio: 3 / 2;
-  background: var(--n-color-embedded);
+  background: transparent;
   border: 0;
-  cursor: pointer;
   display: block;
-  overflow: hidden;
+  height: 100%;
   padding: 0;
   width: 100%;
 }
 
-.thumb {
+.thumb,
+.preview-image {
   display: block;
   height: 100%;
   object-fit: cover;
@@ -849,84 +863,204 @@ onBeforeUnmount(() => {
 
 .thumb-placeholder {
   align-items: center;
-  color: var(--n-text-color-3);
+  color: var(--app-text-muted);
   display: flex;
-  font-size: 12px;
   height: 100%;
   justify-content: center;
-  width: 100%;
 }
 
 .thumb-placeholder.is-failed {
-  background: repeating-linear-gradient(
-    45deg,
-    rgb(208 48 80 / 8%),
-    rgb(208 48 80 / 8%) 8px,
-    transparent 8px,
-    transparent 16px
-  );
+  background: repeating-linear-gradient(45deg, rgb(244 63 94 / 12%), rgb(244 63 94 / 12%) 8px, transparent 8px, transparent 16px);
 }
 
-.card-body {
-  display: grid;
-  gap: 10px;
+.wallpaper-overlay {
+  background: linear-gradient(to top, rgb(0 0 0 / 88%), rgb(0 0 0 / 28%) 52%, transparent);
+  display: flex;
+  flex-direction: column;
+  inset: 0;
+  justify-content: space-between;
+  opacity: 0;
   padding: 12px;
+  pointer-events: none;
+  position: absolute;
+  transition: opacity 0.18s ease;
 }
 
-.card-title,
-.card-info,
-.card-meta {
-  align-items: center;
+.wallpaper-card:hover .wallpaper-overlay {
+  opacity: 1;
+}
+
+.overlay-top,
+.overlay-bottom {
+  align-items: flex-start;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.overlay-bottom {
+  align-items: flex-end;
+}
+
+.status-dot {
+  background: var(--app-primary);
+  border-radius: 999px;
+  box-shadow: 0 0 8px currentcolor;
+  color: var(--app-primary);
+  height: 8px;
+  width: 8px;
+}
+
+.status-dot.sfw {
+  color: var(--app-success);
+  background: var(--app-success);
+}
+
+.status-dot.sketchy {
+  color: var(--app-warning);
+  background: var(--app-warning);
+}
+
+.status-dot.nsfw {
+  color: var(--app-danger);
+  background: var(--app-danger);
+}
+
+.overlay-meta {
+  color: var(--app-text-muted);
+  display: grid;
+  font-family: var(--app-font-mono);
+  font-size: 11px;
+  gap: 3px;
+}
+
+.card-actions {
   display: flex;
   gap: 8px;
-  justify-content: space-between;
+  pointer-events: auto;
 }
 
-.card-info {
-  min-width: 0;
-}
-
-.card-info :deep(.n-space) {
-  min-width: 0;
-}
-
-.card-title {
-  font-weight: 600;
-}
-
-.card-title span:last-child,
-.card-meta {
-  color: var(--n-text-color-3);
-  font-size: 12px;
+.primary-action {
+  background: var(--app-primary-solid);
+  color: #001f28;
 }
 
 .load-sentinel {
   align-items: center;
-  color: var(--n-text-color-3);
+  color: var(--app-text-muted);
   display: flex;
-  font-size: 13px;
   justify-content: center;
-  min-height: 56px;
+  min-height: 72px;
 }
 
-.preview-modal {
-  max-width: 1100px;
-  width: 88vw;
+.preview-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  height: min(860px, calc(100vh - 48px));
+  width: min(1380px, calc(100vw - 48px));
+}
+
+.preview-image-panel {
+  align-items: center;
+  background: #0e0e0f;
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+}
+
+.preview-image-panel .preview-image {
+  object-fit: contain;
+}
+
+.preview-side {
+  background: rgb(19 19 20 / 72%);
+  border-left: 1px solid var(--app-border);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.preview-header {
+  align-items: flex-start;
+  border-bottom: 1px solid var(--app-border);
+  display: flex;
+  justify-content: space-between;
+  padding: 16px;
+}
+
+.preview-header h2 {
+  font-size: 18px;
+  margin: 0 0 4px;
+}
+
+.preview-meta-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 16px;
+}
+
+.preview-meta-grid div {
+  background: var(--app-surface-low);
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius);
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+}
+
+.preview-meta-grid span {
+  color: var(--app-text-dim);
+  font-family: var(--app-font-mono);
+  font-size: 11px;
+}
+
+.preview-meta-grid strong {
+  font-weight: 500;
+  overflow-wrap: anywhere;
 }
 
 .tag-list {
-  max-height: 160px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-height: 180px;
   overflow: auto;
+  padding: 0 16px 16px;
+}
+
+.preview-actions {
+  border-top: 1px solid var(--app-border);
+  display: grid;
+  gap: 10px;
+  margin-top: auto;
+  padding: 16px;
 }
 
 @media (max-width: 900px) {
-  .online-page {
-    min-width: 0;
-    padding: 0 12px 24px;
+  .primary-search,
+  .preview-shell {
+    grid-template-columns: 1fr;
   }
 
-  .searchbar {
-    padding: 8px;
+  .primary-search {
+    display: grid;
+  }
+
+  .sort-group,
+  .result-meta {
+    margin-left: 0;
+  }
+
+  .preview-shell {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .preview-side {
+    border-left: 0;
+    border-top: 1px solid var(--app-border);
+    max-height: 42vh;
   }
 }
 </style>
