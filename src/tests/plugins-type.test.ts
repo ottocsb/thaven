@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { SearchResponse } from './type'
+import type { SearchResponse } from '../plugins/type'
 
 describe('wallhaven response types', () => {
   it('accepts documented search response shape', () => {
