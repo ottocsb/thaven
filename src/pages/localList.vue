@@ -37,7 +37,8 @@ defineOptions({
 const settings = useAppSettings()
 const message = useMessage()
 const cachedWallpapers = localWallpaperCache as LocalWallpaperCache | null
-const directory = ref(cachedWallpapers?.directory || settings.downloadDir)
+// 本地目录始终等于设置页的下载目录，二者是同一变量
+const directory = computed(() => settings.downloadDir)
 const wallpapers = ref<LocalWallpaper[]>(cachedWallpapers?.wallpapers || [])
 const selectedWallpaper = ref<LocalWallpaper | null>(null)
 const showPreview = ref(false)
@@ -160,7 +161,6 @@ function leaveLocalPage() {
 
 async function ensureCurrentDirectory() {
   const result = await ensureDownloadDir(directory.value || undefined)
-  directory.value = result.path
   if (settings.downloadDir !== result.path)
     settings.setDownloadDir(result.path)
 }
@@ -170,7 +170,7 @@ async function loadDefaultDirectory() {
     return
 
   const result = await getDefaultDownloadDir()
-  directory.value = result.path
+  settings.setDownloadDir(result.path)
 }
 
 async function loadWallpapers() {
@@ -329,11 +329,18 @@ onMounted(() => {
 onActivated(() => {
   isActive = true
 
-  if (hasBeenDeactivated) {
-    afterPagePaint(() => {
-      void loadWallpapers()
-    })
+  if (!hasBeenDeactivated)
+    return
+
+  // 下载目录可能在设置页被修改过，目录变化时回到第一页（watch(page) 会触发加载）
+  if (localWallpaperCache?.directory !== directory.value && page.value !== 1) {
+    page.value = 1
+    return
   }
+
+  afterPagePaint(() => {
+    void loadWallpapers()
+  })
 })
 
 onDeactivated(() => {
@@ -350,7 +357,9 @@ onBeforeUnmount(() => {
     <section class="app-panel local-toolbar">
       <div class="directory-box">
         <FolderOpen class="directory-icon" />
-        <input v-model="directory" class="app-input directory-input" placeholder="下载目录">
+        <span class="directory-input directory-text" :title="directory">
+          {{ directory || '未设置下载目录，请前往设置页配置' }}
+        </span>
       </div>
       <div class="toolbar-actions">
         <button class="app-button" :disabled="loading" type="button" @click="refreshWallpapers">
@@ -538,6 +547,16 @@ onBeforeUnmount(() => {
 
 .directory-input:focus {
   box-shadow: none;
+}
+
+.directory-text {
+  align-items: center;
+  color: var(--app-text-muted);
+  display: flex;
+  overflow: hidden;
+  padding: 8px 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .toolbar-actions {
