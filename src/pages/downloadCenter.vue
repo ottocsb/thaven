@@ -1,5 +1,6 @@
 <script lang="ts" setup>
 import { convertFileSrc } from '@tauri-apps/api/core'
+import { FolderOpen, Refresh, Trash } from '@vicons/ionicons5'
 import { useMessage } from 'naive-ui'
 import { onMounted, ref } from 'vue'
 import { ensureDownloadDir, openInFileManager } from '~/api/invoke'
@@ -19,26 +20,6 @@ function statusText(status: DownloadTaskStatus) {
     return '已完成'
 
   return '失败'
-}
-
-function statusType(status: DownloadTaskStatus) {
-  if (status === 'downloading')
-    return 'info'
-
-  if (status === 'completed')
-    return 'success'
-
-  return 'error'
-}
-
-function progressStatus(status: DownloadTaskStatus) {
-  if (status === 'completed')
-    return 'success'
-
-  if (status === 'failed')
-    return 'error'
-
-  return 'default'
 }
 
 function taskProgress(task: DownloadTask) {
@@ -139,144 +120,206 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="download-page">
-    <n-space vertical size="large">
-      <n-card title="下载中心" size="small">
-        <n-space align="center" justify="space-between">
-          <div class="download-summary">
-            下载中 {{ downloadTasks.downloadingTasks.length }} 个，已完成 {{ downloadTasks.completedTasks.length }} 个，失败 {{ downloadTasks.failedTasks.length }} 个
-          </div>
+  <div class="app-page download-page">
+    <section class="download-header">
+      <div>
+        <h1 class="app-section-title">
+          下载中心
+        </h1>
+        <p class="app-section-subtitle">
+          管理高分辨率壁纸下载任务。
+        </p>
+      </div>
 
-          <n-button
-            :disabled="!downloadTasks.finishedTasks.length"
-            size="small"
-            @click="downloadTasks.clearFinishedTasks()"
+      <div class="stats-grid">
+        <div class="stat-card app-panel">
+          <span>DOWNLOADING</span>
+          <strong>{{ downloadTasks.downloadingTasks.length }}</strong>
+        </div>
+        <div class="stat-card app-panel success">
+          <span>COMPLETED</span>
+          <strong>{{ downloadTasks.completedTasks.length }}</strong>
+        </div>
+        <div class="stat-card app-panel danger">
+          <span>FAILED</span>
+          <strong>{{ downloadTasks.failedTasks.length }}</strong>
+        </div>
+      </div>
+    </section>
+
+    <div class="download-actions">
+      <button
+        class="app-button danger"
+        :disabled="!downloadTasks.finishedTasks.length"
+        type="button"
+        @click="downloadTasks.clearFinishedTasks()"
+      >
+        清理已结束
+      </button>
+    </div>
+
+    <div v-if="!downloadTasks.tasks.length" class="app-empty">
+      暂无下载记录
+    </div>
+
+    <div v-else class="task-list">
+      <article v-for="task in downloadTasks.tasks" :key="task.id" class="task-row app-panel" :class="task.status">
+        <div class="task-thumb">
+          <img
+            v-if="thumbnailSrc(task)"
+            :alt="task.filename"
+            decoding="async"
+            loading="lazy"
+            :src="thumbnailSrc(task)"
+            @error="markThumbnailFailed(task.id)"
           >
-            清理已结束
-          </n-button>
-        </n-space>
-      </n-card>
+          <span v-else>{{ thumbnailFailed[task.id] ? '加载失败' : '无图' }}</span>
+        </div>
 
-      <n-empty v-if="!downloadTasks.tasks.length" description="暂无下载记录" />
-
-      <n-list v-else bordered>
-        <n-list-item v-for="task in downloadTasks.tasks" :key="task.id">
-          <div class="task-row">
-            <div class="task-thumb">
-              <img
-                v-if="thumbnailSrc(task)"
-                :alt="task.filename"
-                decoding="async"
-                loading="lazy"
-                :src="thumbnailSrc(task)"
-                @error="markThumbnailFailed(task.id)"
-              >
-              <span v-else>{{ thumbnailFailed[task.id] ? '加载失败' : '无图' }}</span>
-            </div>
-
-            <div class="task-info">
-              <div class="task-title">
-                <strong :title="task.filename">{{ task.filename }}</strong>
-                <n-tag size="small" :type="statusType(task.status)">
-                  {{ statusText(task.status) }}
-                </n-tag>
-                <n-tag v-if="task.alreadyExists" size="small" type="warning">
-                  已存在
-                </n-tag>
-              </div>
-
-              <div class="task-meta">
-                <span>开始：{{ formatDate(task.startedAt) }}</span>
-                <span>结束：{{ formatDate(task.finishedAt) }}</span>
-              </div>
-
-              <div class="task-progress">
-                <n-progress
-                  :height="6"
-                  :percentage="taskProgress(task)"
-                  :processing="task.status === 'downloading'"
-                  :status="progressStatus(task.status)"
-                  type="line"
-                />
-                <span>{{ progressText(task) }}</span>
-              </div>
-
-              <div class="task-path" :title="displayPath(task)">
-                {{ displayPath(task) }}
-              </div>
-
-              <div v-if="task.error" class="task-error">
-                {{ task.error }}
-              </div>
-            </div>
-
-            <n-space>
-              <n-button
-                size="small"
-                :disabled="task.status !== 'completed'"
-                @click="showInFolder(task)"
-              >
-                打开位置
-              </n-button>
-              <n-button
-                v-if="task.status === 'failed'"
-                size="small"
-                type="primary"
-                @click="retry(task)"
-              >
-                重试
-              </n-button>
-              <n-button
-                v-if="task.status !== 'downloading'"
-                size="small"
-                @click="downloadTasks.removeTask(task.id)"
-              >
-                移除
-              </n-button>
-            </n-space>
+        <div class="task-info">
+          <div class="task-title">
+            <strong :title="task.filename">{{ task.filename }}</strong>
+            <span class="app-chip" :class="{ success: task.status === 'completed', danger: task.status === 'failed' }">
+              {{ statusText(task.status) }}
+            </span>
+            <span v-if="task.alreadyExists" class="app-chip warning">已存在</span>
           </div>
-        </n-list-item>
-      </n-list>
-    </n-space>
+
+          <div class="task-meta">
+            <span>开始：{{ formatDate(task.startedAt) }}</span>
+            <span>结束：{{ formatDate(task.finishedAt) }}</span>
+          </div>
+
+          <div class="task-progress">
+            <div class="progress-track">
+              <span
+                class="progress-bar"
+                :class="task.status"
+                :style="{ width: `${taskProgress(task)}%` }"
+              />
+            </div>
+            <span>{{ progressText(task) }}</span>
+          </div>
+
+          <div class="task-path" :title="displayPath(task)">
+            {{ displayPath(task) }}
+          </div>
+
+          <div v-if="task.error" class="task-error">
+            {{ task.error }}
+          </div>
+        </div>
+
+        <div class="task-actions">
+          <button
+            class="app-icon-button"
+            :disabled="task.status !== 'completed'"
+            title="打开位置"
+            type="button"
+            @click="showInFolder(task)"
+          >
+            <FolderOpen class="app-icon" />
+          </button>
+          <button
+            v-if="task.status === 'failed'"
+            class="app-icon-button"
+            title="重试"
+            type="button"
+            @click="retry(task)"
+          >
+            <Refresh class="app-icon" />
+          </button>
+          <button
+            v-if="task.status !== 'downloading'"
+            class="app-icon-button danger"
+            title="移除"
+            type="button"
+            @click="downloadTasks.removeTask(task.id)"
+          >
+            <Trash class="app-icon" />
+          </button>
+        </div>
+      </article>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .download-page {
-  min-width: 720px;
-  padding: 24px 24px 32px;
+  display: grid;
+  gap: 18px;
 }
 
-.download-summary,
-.task-meta,
-.task-path {
-  color: var(--n-text-color-3);
-  font-size: 13px;
+.download-header {
+  align-items: end;
+  display: flex;
+  gap: 24px;
+  justify-content: space-between;
+}
+
+.stats-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(112px, 1fr));
+}
+
+.stat-card {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+}
+
+.stat-card span {
+  color: var(--app-primary);
+  font-family: var(--app-font-mono);
+  font-size: 11px;
+}
+
+.stat-card.success span {
+  color: var(--app-success);
+}
+
+.stat-card.danger span {
+  color: var(--app-danger);
+}
+
+.stat-card strong {
+  font-size: 20px;
+}
+
+.download-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.task-list {
+  display: grid;
+  gap: 12px;
 }
 
 .task-row {
   align-items: center;
   display: flex;
-  gap: 16px;
-  justify-content: space-between;
+  gap: 14px;
+  padding: 12px;
+  transition: border-color 0.16s ease, background-color 0.16s ease;
+}
+
+.task-row.failed {
+  border-color: rgb(244 63 94 / 26%);
 }
 
 .task-thumb {
   align-items: center;
   aspect-ratio: 3 / 2;
-  background: var(--n-color-embedded);
-  border-radius: 6px;
-  color: var(--n-text-color-3);
+  background: var(--app-surface-high);
+  border-radius: var(--app-radius);
+  color: var(--app-text-muted);
   display: flex;
-  flex: 0 0 120px;
+  flex: 0 0 116px;
   font-size: 12px;
   justify-content: center;
   overflow: hidden;
-}
-
-.task-thumb span {
-  padding: 0 8px;
-  text-align: center;
 }
 
 .task-thumb img {
@@ -288,8 +331,8 @@ onMounted(() => {
 
 .task-info {
   display: grid;
-  gap: 6px;
   flex: 1;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -307,6 +350,13 @@ onMounted(() => {
   white-space: nowrap;
 }
 
+.task-meta,
+.task-path,
+.task-progress span {
+  color: var(--app-text-muted);
+  font-size: 12px;
+}
+
 .task-meta {
   display: flex;
   flex-wrap: wrap;
@@ -316,30 +366,51 @@ onMounted(() => {
 .task-progress {
   align-items: center;
   display: grid;
-  gap: 8px;
-  grid-template-columns: minmax(160px, 1fr) auto;
+  gap: 10px;
+  grid-template-columns: minmax(140px, 1fr) auto;
 }
 
-.task-progress span {
-  color: var(--n-text-color-3);
-  font-size: 12px;
-  white-space: nowrap;
+.progress-track {
+  background: var(--app-surface-highest);
+  border-radius: 999px;
+  height: 5px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  background: var(--app-primary-solid);
+  display: block;
+  height: 100%;
+  transition: width 0.2s ease;
+}
+
+.progress-bar.completed {
+  background: var(--app-success);
+}
+
+.progress-bar.failed {
+  background: var(--app-danger);
 }
 
 .task-error {
-  color: #d03050;
-  font-size: 13px;
+  color: var(--app-danger);
+}
+
+.task-actions {
+  display: flex;
+  gap: 8px;
 }
 
 @media (max-width: 900px) {
-  .download-page {
-    min-width: 0;
-    padding: 12px 12px 24px;
+  .download-header,
+  .task-row {
+    align-items: stretch;
+    flex-direction: column;
   }
 
-  .task-row {
-    align-items: flex-start;
-    flex-direction: column;
+  .stats-grid {
+    grid-template-columns: 1fr;
+    width: 100%;
   }
 
   .task-thumb {
